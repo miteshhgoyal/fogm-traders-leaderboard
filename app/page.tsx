@@ -1,7 +1,7 @@
 "use client";
 
 /* ──────────────────────────────────────────────────────────────────────────
- * FOGM — premium fintech leaderboard landing page (static v1, API-ready).
+ * FOGM — premium fintech leaderboard landing page (v3: USD, real names, join popup).
  *
  * Where things live (all in this file unless noted):
  *   • THEME / PRESETS / ACTIVE_PRESET / SHOW_THEME_STUDIO ... "THEME CONFIG"
@@ -23,9 +23,12 @@ import {
   type ReactNode,
 } from "react";
 import { Inter } from "next/font/google";
+import Avatar from "@/components/Avatar";
+import AuthProvider from "@/components/AuthProvider";
+import { useAuth } from "@/components/auth-context";
 import {
-  formatCompactINR,
-  formatINR,
+  formatCompactMoney,
+  formatMoney,
   formatNumber,
   getActivity,
   getCompetition,
@@ -141,7 +144,7 @@ const fontInter = Inter({ subsets: ["latin"], variable: "--font-inter", display:
 interface Fmt {
   money: (n: number) => string;
   compact: (n: number) => string;
-  /** full amount below ₹1 L, compact above: keeps big numbers inside small tiles */
+  /** full amount below $100K, compact above: keeps big numbers inside small tiles */
   auto: (n: number) => string;
   num: (n: number) => string;
   date: (iso: string, o?: Intl.DateTimeFormatOptions) => string;
@@ -149,9 +152,9 @@ interface Fmt {
 function makeFmt(cur?: Competition["currency"]): Fmt {
   const opts = cur ? { code: cur.code, locale: cur.locale } : undefined;
   return {
-    money: (n) => formatINR(n, opts),
-    compact: (n) => formatCompactINR(n, opts),
-    auto: (n) => (n >= 1e5 ? formatCompactINR(n, opts) : formatINR(n, opts)),
+    money: (n) => formatMoney(n, opts),
+    compact: (n) => formatCompactMoney(n, opts),
+    auto: (n) => (n >= 1e5 ? formatCompactMoney(n, opts) : formatMoney(n, opts)),
     num: (n) => formatNumber(n, cur?.locale),
     date: (iso, o) =>
       new Intl.DateTimeFormat(cur?.locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC", ...o }).format(new Date(iso)),
@@ -433,7 +436,7 @@ const BTN_VARIANT = {
 } as const;
 function Button({ variant = "primary", size = "md", href, className, children, ...rest }: { variant?: keyof typeof BTN_VARIANT; size?: "md" | "lg"; href?: string; className?: string; children: ReactNode } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const cls = cn(BTN_BASE, BTN_VARIANT[variant], size === "lg" ? "h-12" : "h-11", className);
-  if (href) return <a href={href} className={cls}>{children}</a>;
+  if (href) return <a href={href} className={cls} onClick={rest.onClick as unknown as React.MouseEventHandler<HTMLAnchorElement> | undefined}>{children}</a>;
   return <button type="button" className={cls} {...rest}>{children}</button>;
 }
 
@@ -690,7 +693,8 @@ interface BoardData {
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "Unexpected error");
 
-function useLandingData() {
+/** `sessionKey` changes when the signed-in user (or their public profile) changes, so the board refetches. */
+function useLandingData(sessionKey: string) {
   const [state, setState] = useState<DataState>(() => ({
     competition: loadingRes(),
     pool: loadingRes(),
@@ -761,7 +765,8 @@ function useLandingData() {
         setBoard((b) => (silent && b.data ? b : { state: "error", data: null, error: errMsg(e) }));
       }
     },
-    [period, dq, limit, key],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sessionKey only forces a refetch
+    [period, dq, limit, key, sessionKey],
   );
 
   useEffect(() => {
@@ -769,6 +774,16 @@ function useLandingData() {
     const id = setInterval(() => void loadBoard(true), REFRESH_MS);
     return () => clearInterval(id);
   }, [loadBoard]);
+
+  // when the viewer signs in / out / edits their profile, refresh the lists that can contain them
+  const firstSession = useRef(true);
+  useEffect(() => {
+    if (firstSession.current) {
+      firstSession.current = false;
+      return;
+    }
+    void loadKeys(["winners", "activity"], true);
+  }, [sessionKey, loadKeys]);
 
   return {
     ...state,
@@ -799,7 +814,51 @@ function ThemeToggle({ mode, onToggle }: { mode: Mode; onToggle: () => void }) {
   );
 }
 
+/** Avatar button + dropdown for a signed-in user. */
+function AccountMenu() {
+  const auth = useAuth();
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => wrap.current && !wrap.current.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  const u = auth.user;
+  if (!u) return null;
+  const shown = u.name || u.email;
+  const item = "flex h-11 w-full items-center rounded-xl px-3 text-left text-cell font-medium text-ink transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  return (
+    <div ref={wrap} className="relative">
+      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label="Account menu" onClick={() => setOpen((o) => !o)}
+        className="grid size-11 place-items-center rounded-full transition hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg">
+        <Avatar name={shown} src={u.avatarUrl} size={36} />
+      </button>
+      {open && (
+        <div role="menu" aria-label="Account" className="absolute right-0 top-full z-50 mt-2 w-64 rounded-2xl border border-hairline bg-card p-2 shadow-xl">
+          <div className="border-b border-hairline px-3 pb-3 pt-2">
+            <div className="truncate text-cell font-semibold text-ink">{shown}</div>
+            <div className="truncate text-meta text-mute">{u.email}</div>
+          </div>
+          <div className="pt-2">
+            <button role="menuitem" type="button" className={item} onClick={() => { setOpen(false); auth.openModal("card"); }}>My rank card</button>
+            <button role="menuitem" type="button" className={item} onClick={() => { setOpen(false); auth.openModal("photo"); }}>Change photo</button>
+            <button role="menuitem" type="button" className={item} onClick={() => { setOpen(false); void auth.logout(); }}>Log out</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Nav({ mode, onToggle, declared }: { mode: Mode; onToggle: () => void; declared: boolean }) {
+  const auth = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -836,8 +895,14 @@ function Nav({ mode, onToggle, declared }: { mode: Mode; onToggle: () => void; d
         </nav>
         <div className="flex items-center gap-2">
           <ThemeToggle mode={mode} onToggle={onToggle} />
-          <span className="hidden sm:contents"><Button variant="ghost" href={URLS.login}>Log in</Button></span>
-          <Button href={URLS.join}><span className="sm:hidden">Join</span><span className="hidden sm:inline">Join the pool</span></Button>
+          {auth.user ? (
+            <AccountMenu />
+          ) : (
+            <>
+              <span className="hidden sm:contents"><Button variant="ghost" href={URLS.login} onClick={(e) => { e.preventDefault(); auth.openModal("join"); }}>Log in</Button></span>
+              <Button href={URLS.join} onClick={(e) => { e.preventDefault(); auth.openModal("join"); }}><span className="sm:hidden">Join</span><span className="hidden sm:inline">Join the pool</span></Button>
+            </>
+          )}
           <button type="button" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} aria-controls="mobile-menu" onClick={() => setOpen((o) => !o)}
             className="grid size-11 place-items-center rounded-full text-ink transition hover:bg-ink/5 md:hidden">
             <Icon name={open ? "x" : "menu"} size={20} />
@@ -851,10 +916,12 @@ function Nav({ mode, onToggle, declared }: { mode: Mode; onToggle: () => void; d
             {l.label}
           </a>
         ))}
-        <div className="mt-3 flex gap-2">
-          <Button variant="ghost" href={URLS.login} className="flex-1">Log in</Button>
-          <Button href={URLS.join} className="flex-1" onClick={() => setOpen(false)}>Join the pool</Button>
-        </div>
+        {!auth.user && (
+          <div className="mt-3 flex gap-2">
+            <Button variant="ghost" href={URLS.login} className="flex-1" onClick={(e) => { e.preventDefault(); setOpen(false); auth.openModal("join"); }}>Log in</Button>
+            <Button href={URLS.join} className="flex-1" onClick={(e) => { e.preventDefault(); setOpen(false); auth.openModal("join"); }}>Join the pool</Button>
+          </div>
+        )}
       </div>
     </header>
   );
@@ -923,11 +990,11 @@ function Top3Card({ d }: { d: Landing }) {
   const declared = c?.status === "winners_declared";
   const heading = d.winners.data?.heading ?? (declared ? "Winners" : "Current leaders (provisional)");
   const board = d.board.data && d.board.data.key.startsWith("overall") ? d.board.data.top3 : null;
-  const rows: { rank: number; name: string; saved: number; flag: string; movement: number; prev: number | null; hasMv: boolean }[] | null =
+  const rows: { rank: number; name: string; avatar: string | null; saved: number; flag: string; movement: number; prev: number | null; hasMv: boolean }[] | null =
     board && board.length >= 3
-      ? board.slice(0, 3).map((e) => ({ rank: e.rank, name: e.maskedName, saved: e.brokerageSaved, flag: e.countryCode, movement: e.movement, prev: e.previousRank, hasMv: true }))
+      ? board.slice(0, 3).map((e) => ({ rank: e.rank, name: e.name, avatar: e.avatarUrl, saved: e.brokerageSaved, flag: e.countryCode, movement: e.movement, prev: e.previousRank, hasMv: true }))
       : d.winners.data && d.winners.data.winners.length >= 3
-        ? d.winners.data.winners.slice(0, 3).map((w) => ({ rank: w.rank, name: w.maskedName, saved: w.brokerageSaved, flag: w.countryCode, movement: 0, prev: 0, hasMv: false }))
+        ? d.winners.data.winners.slice(0, 3).map((w) => ({ rank: w.rank, name: w.name, avatar: w.avatarUrl, saved: w.brokerageSaved, flag: w.countryCode, movement: 0, prev: 0, hasMv: false }))
         : null;
   const cd = countdownTarget(c);
   return (
@@ -944,6 +1011,7 @@ function Top3Card({ d }: { d: Landing }) {
           ? rows.map((r) => (
               <div key={r.rank} role="listitem" className="flex h-14 items-center gap-3 rounded-xl px-3 transition hover:bg-accent/10">
                 <span className={rankBadge(r.rank, true)}>{r.rank}</span>
+                <Avatar name={r.name} src={r.avatar} size={36} />
                 <span className="min-w-0 flex-1 truncate text-cell font-medium text-ink">{r.name}</span>
                 {r.hasMv && <Movement movement={r.movement} previousRank={r.prev} />}
                 <span className="text-cell font-semibold tabular-nums text-ink">{f.money(r.saved)}</span>
@@ -952,6 +1020,7 @@ function Top3Card({ d }: { d: Landing }) {
           : [0, 1, 2].map((i) => (
               <div key={i} className="flex h-14 items-center gap-3 px-3">
                 <Sk w={28} h={28} className="rounded-full" />
+                <Sk w={36} h={36} className="rounded-full" />
                 <Sk h={16} className="flex-1" />
                 <Sk w={64} h={16} />
               </div>
@@ -989,6 +1058,7 @@ function SpecStat({ label, unit, loading, children }: { label: string; unit?: st
 
 function Hero({ d }: { d: Landing }) {
   const f = useFmt();
+  const auth = useAuth();
   const now = useNow(60000);
   const c = d.competition.data;
   const p = d.pool.data;
@@ -1030,7 +1100,7 @@ function Hero({ d }: { d: Landing }) {
             {ended ? (
               <Button size="lg" href="#winners">{status === "winners_declared" ? "See the winners" : "See the final standings"}</Button>
             ) : (
-              <Button size="lg" href={URLS.join}>Join the pool</Button>
+              <Button size="lg" href={URLS.join} onClick={(e) => { e.preventDefault(); auth.user ? auth.openModal("card") : auth.openModal("join"); }}>{auth.user ? "My rank card" : "Join the pool"}</Button>
             )}
             <Button size="lg" variant="ghost" href="#leaderboard">View leaderboard</Button>
           </div>
@@ -1056,7 +1126,7 @@ function TickerItem({ a }: { a: ActivityItem }) {
   return (
     <span className="inline-flex h-11 items-center gap-2 whitespace-nowrap border-r border-hairline px-6 text-meta text-mute">
       <span className="grid size-5 place-items-center rounded-full bg-accent/10 text-accent"><Icon name={icon} size={12} /></span>
-      <b className="font-semibold text-ink">{a.maskedName}</b>
+      <b className="font-semibold text-ink">{a.name}</b>
       {a.kind === "saving" && <>saved <span className="font-semibold text-up">{f.money(a.amount)}</span> on {a.segment}</>}
       {a.kind === "rank_up" && <>climbed the board in {a.segment}</>}
       {a.kind === "joined" && <>joined the pool · {a.segment}</>}
@@ -1087,7 +1157,7 @@ const PERIODS: { id: Period; label: string }[] = [
   { id: "week", label: "This week" },
   { id: "overall", label: "Overall" },
 ];
-const COLS = "grid-cols-[28px_minmax(0,1fr)_auto] md:grid-cols-[28px_minmax(0,1fr)_56px_56px_112px_64px_152px] lg:grid-cols-[28px_minmax(0,1fr)_72px_152px] xl:grid-cols-[28px_minmax(0,1fr)_56px_56px_112px_64px_152px]";
+const COLS = "grid-cols-[28px_minmax(0,1fr)_auto] md:grid-cols-[28px_minmax(0,1fr)_56px_56px_64px_152px] lg:grid-cols-[28px_minmax(0,1fr)_72px_152px] xl:grid-cols-[28px_minmax(0,1fr)_56px_56px_64px_152px]";
 const PED = { 1: "h-10 [--pd:300ms]", 2: "h-8 [--pd:100ms]", 3: "h-6 [--pd:500ms]" } as const;
 
 function Podium({ entries, heading, tiers, declared }: { entries: LeaderboardEntry[]; heading: string; tiers: PrizeTier[] | null; declared: boolean }) {
@@ -1114,12 +1184,13 @@ function Podium({ entries, heading, tiers, declared }: { entries: LeaderboardEnt
                     <Crown className="absolute -top-1 left-1/2 -ml-[14px] hidden h-6 w-7 text-gold opacity-0 drop-shadow sm:block group-data-[in=true]/iv:animate-[f-crown_.7s_cubic-bezier(.3,1.5,.5,1)_.6s_forwards]" />
                   </>
                 )}
-                <div className={cn("relative grid size-10 shrink-0 place-items-center rounded-full text-ctitle", MEDAL[r].badge)} aria-label={`Rank ${r}`}>
-                  {r}
+                <div className="relative shrink-0" role="img" aria-label={`Rank ${r}`}>
+                  <span className={cn("block rounded-full p-[3px]", MEDAL[r].badge)}><Avatar name={e.name} src={e.avatarUrl} size={r === 1 ? 56 : 48} className="border-2 border-card" /></span>
+                  <span className={cn("absolute -bottom-1 -left-1 grid size-6 place-items-center rounded-full border-2 border-card text-meta font-semibold", MEDAL[r].badge)}>{r}</span>
                   <span className="absolute -bottom-1 -right-1 grid rounded-full border-2 border-card bg-card"><Flag code={e.countryCode} size={14} /></span>
                 </div>
                 <div className="min-w-0 flex-1 sm:w-full sm:flex-none">
-                  <div className="truncate text-cell font-medium text-ink">{e.maskedName}</div>
+                  <div className="truncate text-cell font-medium text-ink">{e.name}</div>
                   <div className={cn("text-ink", r === 1 ? "text-pod1" : "text-pod")}>
                     <CountUp value={e.brokerageSaved} format={f.money} />
                   </div>
@@ -1141,7 +1212,7 @@ function Podium({ entries, heading, tiers, declared }: { entries: LeaderboardEnt
   );
 }
 
-function Row({ e, i, chip, plain }: { e: LeaderboardEntry; i: number; chip?: string; plain?: boolean }) {
+function Row({ e, i, plain }: { e: LeaderboardEntry; i: number; plain?: boolean }) {
   const f = useFmt();
   return (
     <div role="row" style={{ "--i": i } as CSSProperties}
@@ -1150,20 +1221,24 @@ function Row({ e, i, chip, plain }: { e: LeaderboardEntry; i: number; chip?: str
         e.inWinningZone && "bg-accent/[0.04] shadow-[inset_2px_0_0_var(--accent)]", e.isYou && "bg-accent/10")}>
       <div role="cell"><span className={rankBadge(e.rank, e.inWinningZone)}>{e.rank}</span></div>
       <div role="cell" className="min-w-0">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="font-medium tracking-wide text-ink">{e.maskedName}</span>
-          {e.isYou && <Pill tone="accent">You</Pill>}
-        </div>
-        <div className="hidden truncate text-meta text-faint md:block">{e.city} · {f.compact(e.turnover)} turnover</div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-mute md:hidden">
-          <Movement movement={e.movement} previousRank={e.previousRank} />
-          <span>{f.num(e.tradesCount)} trades</span>
-          <span>{e.city}</span>
+        <div className="flex items-center gap-3">
+          <Avatar name={e.name} src={e.avatarUrl} size={36} />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="truncate font-medium text-ink">{e.name}</span>
+              {e.isYou && <Pill tone="accent">You</Pill>}
+            </div>
+            <div className="hidden truncate text-meta text-faint md:block">{e.city} · {e.topSegment}</div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-mute md:hidden">
+              <Movement movement={e.movement} previousRank={e.previousRank} />
+              <span>{f.num(e.tradesCount)} trades</span>
+              <span>{e.city}</span>
+            </div>
+          </div>
         </div>
       </div>
       <div role="cell" className="hidden md:block lg:hidden xl:block"><Movement movement={e.movement} previousRank={e.previousRank} /></div>
       <div role="cell" className="hidden text-right tabular-nums md:block">{f.num(e.tradesCount)}</div>
-      <div role="cell" className="hidden md:block lg:hidden xl:block"><Pill>{e.topSegment}</Pill></div>
       <div role="cell" className="hidden md:block lg:hidden xl:block"><Sparkline values={e.trend} /></div>
       <div role="cell" className="flex items-center justify-end gap-2 font-semibold tabular-nums text-ink">
         {f.money(e.brokerageSaved)}
@@ -1184,32 +1259,8 @@ function SideCard({ title, children, className }: { title: string; children: Rea
 
 function Sidebar({ d, cutoff, you }: { d: Landing; cutoff: { rank: number; saved: number } | null; you: LeaderboardEntry | null }) {
   const f = useFmt();
-  const cd = countdownTarget(d.competition.data);
-  const head = combine(d.competition, d.pool);
   return (
     <aside aria-label="Contest summary" className="fg-scroll flex flex-col gap-4 lg:sticky lg:top-24 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto lg:pr-1">
-      <SideCard title="Pool progress">
-        <Async res={head} what="pool" onRetry={() => { d.retry("competition"); d.retry("pool"); }} skeleton={<div className="grid gap-3"><Sk h={20} /><Sk h={8} className="rounded-full" /><Sk h={16} /></div>}>
-          {([c, p]) => (
-            <InView>
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-stat text-ink"><CountUp value={p.used} format={f.auto} /></span>
-                <span className="text-meta text-mute">of {f.compact(p.poolSize)}</span>
-              </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p.usedPct * 100) / 100} aria-label="Pool used">
-                <div className="fg-bar h-full rounded-full bg-linear-to-r from-accent to-accent-2" style={{ "--p": Math.max(p.usedPct / 100, 0.012) } as CSSProperties} />
-              </div>
-              <div className="mt-2 flex justify-between text-meta text-mute">
-                <span>{p.usedPct.toFixed(2)}% used</span>
-                <span>{f.auto(p.remaining)} left</span>
-              </div>
-              {cd && <div className="mt-4 border-t border-hairline pt-4"><Countdown target={cd.t} label={cd.l} compact /></div>}
-              <span className="sr-only">{c.title}</span>
-            </InView>
-          )}
-        </Async>
-      </SideCard>
-
       <SideCard title="Winning zone">
         {cutoff ? (
           <>
@@ -1242,8 +1293,8 @@ function Sidebar({ d, cutoff, you }: { d: Landing; cutoff: { rank: number; saved
             <ul className="grid gap-3">
               {items.slice(0, 5).map((a) => (
                 <li key={a.id} className="flex items-center gap-3 text-meta">
-                  <span className="grid size-6 shrink-0 place-items-center rounded-full bg-accent/10 text-accent"><Icon name={a.kind === "saving" ? "bolt" : a.kind === "rank_up" ? "up" : "userplus"} size={12} /></span>
-                  <span className="min-w-0 flex-1 truncate text-mute"><b className="font-semibold text-ink">{a.maskedName}</b> {a.kind === "saving" ? <>saved <b className="font-semibold text-up">{f.money(a.amount)}</b></> : a.kind === "rank_up" ? "climbed the board" : "joined the pool"}</span>
+                  <Avatar name={a.name} src={a.avatarUrl} size={36} />
+                  <span className="min-w-0 flex-1 truncate text-mute"><b className="font-semibold text-ink">{a.name}</b> {a.kind === "saving" ? <>saved <b className="font-semibold text-up">{f.money(a.amount)}</b></> : a.kind === "rank_up" ? "climbed the board" : "joined the pool"}</span>
                   <span className="shrink-0 text-faint">{timeAgo(a.at)}</span>
                 </li>
               ))}
@@ -1276,7 +1327,6 @@ function LeaderboardSection({ d }: { d: Landing }) {
   };
   const rows = data ? (d.query ? data.page.entries : data.page.entries.filter((e) => e.rank > 3)) : [];
   const you = data ? (data.page.you ?? data.page.entries.find((e) => e.isYou) ?? null) : null;
-  const chipFor = (e: LeaderboardEntry) => tiers?.find((t) => t.id === e.prizeTierId)?.label ?? "Laptop";
 
   return (
     <Section id="leaderboard" alt>
@@ -1297,7 +1347,7 @@ function LeaderboardSection({ d }: { d: Landing }) {
               </div>
               <div className="relative w-full sm:max-w-[300px]">
                 <Icon name="search" size={16} className="pointer-events-none absolute left-3.5 top-3.5 text-faint" />
-                <input type="search" value={d.search} onChange={(e) => d.setSearch(e.target.value)} placeholder="Search masked name" aria-label="Search leaderboard by masked name" autoComplete="off" spellCheck={false}
+                <input type="search" value={d.search} onChange={(e) => d.setSearch(e.target.value)} placeholder="Search traders" aria-label="Search traders" autoComplete="off" spellCheck={false}
                   className="h-11 w-full rounded-xl border border-hairline-strong bg-card pl-10 pr-11 text-cell text-ink outline-none transition placeholder:text-faint focus:border-accent focus:ring-4 focus:ring-accent/15" />
                 {d.search && (
                   <button type="button" aria-label="Clear search" onClick={() => d.setSearch("")} className="absolute right-0 top-0 grid size-11 place-items-center text-faint hover:text-ink"><Icon name="x" size={16} /></button>
@@ -1325,7 +1375,7 @@ function LeaderboardSection({ d }: { d: Landing }) {
                     {rows.length === 0 ? (
                       <div className="px-5 py-12 text-center text-body text-mute">
                         <b className="mb-1 block text-ctitle text-ink">No trader matches &lsquo;{d.query}&rsquo;</b>
-                        Check the spelling, or search with the first two letters of the masked name.
+                        Check the spelling, or try a shorter name.
                         <div className="mt-4"><Button variant="ghost" onClick={() => d.setSearch("")}>Clear search</Button></div>
                       </div>
                     ) : (
@@ -1335,7 +1385,6 @@ function LeaderboardSection({ d }: { d: Landing }) {
                           <div role="columnheader">Participant</div>
                           <div role="columnheader" className="lg:hidden xl:block">Move</div>
                           <div role="columnheader" className="text-right">Trades</div>
-                          <div role="columnheader" className="lg:hidden xl:block">Segment</div>
                           <div role="columnheader" className="lg:hidden xl:block">Trend</div>
                           <div role="columnheader" className="flex items-center justify-end whitespace-nowrap">{metric}{metricHelp && <InfoTip text={metricHelp} label={`What is ${metric}?`} />}</div>
                         </div>
@@ -1343,7 +1392,7 @@ function LeaderboardSection({ d }: { d: Landing }) {
                           <div role="rowgroup">
                             {rows.map((e, i) => (
                               <div key={`${b.key}-${e.rank}`} className="contents">
-                                <Row e={e} i={i % PAGE_SIZE} chip={chipFor(e)} />
+                                <Row e={e} i={i % PAGE_SIZE} />
                                 {!d.query && e.rank === b.page.cutoffRank && (
                                   <div role="row" style={{ "--i": (i % PAGE_SIZE) + 1 } as CSSProperties} className="flex min-h-11 items-center gap-3 border-b border-hairline bg-accent/10 px-4 text-meta font-semibold text-accent">
                                     <span aria-hidden="true" className="h-px flex-1 bg-accent/30" />
@@ -1360,7 +1409,7 @@ function LeaderboardSection({ d }: { d: Landing }) {
                     {you && (
                       <div className="fg-gborder sticky bottom-4 z-10 m-3 overflow-clip rounded-xl shadow-xl" role="complementary" aria-label="Your rank">
                         <span className="absolute right-3 top-0 z-10 rounded-b-md bg-linear-to-br from-accent to-accent-2 px-2 pb-0.5 text-label uppercase text-accent-ink">Your rank</span>
-                        <Row e={you} i={0} plain chip={chipFor(you)} />
+                        <Row e={you} i={0} plain />
                       </div>
                     )}
                     {d.hasMore && (
@@ -1369,7 +1418,7 @@ function LeaderboardSection({ d }: { d: Landing }) {
                   </Card>
                   <div className="mt-4 flex flex-wrap justify-between gap-2 px-1 text-meta text-faint">
                     <span>Showing {f.num(b.page.entries.length)} of {f.num(b.page.total)}</span>
-                    <span>Names are masked to protect privacy.</span>
+                    <span>Names and photos are shown only for traders who opted in.</span>
                   </div>
                 </>
               )}
@@ -1406,12 +1455,8 @@ function PoolSection({ d }: { d: Landing }) {
                     </h3>
                     <span className="text-meta text-mute">{f.date(c.startsAt)} – {f.date(c.endsAt)}</span>
                   </div>
-                  <div className="mt-5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-body text-mute">
-                    <span><b className="text-feat text-ink"><CountUp value={p.used} format={f.money} /></b> of {f.money(p.poolSize)} used</span>
-                    <span><b className="text-ctitle text-ink">{p.usedPct.toFixed(2)}%</b> of the pool</span>
-                  </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p.usedPct * 100) / 100} aria-label="Pool used">
-                    <div className="fg-bar h-full rounded-full bg-linear-to-r from-accent to-accent-2" style={{ "--p": Math.max(p.usedPct / 100, 0.012) } as CSSProperties} />
+                  <div className="mt-5 text-body text-mute">
+                    <b className="text-feat text-ink"><CountUp value={p.used} format={f.money} /></b> of {f.money(p.poolSize)} refunded so far
                   </div>
                   <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-meta text-mute">
                     <div className="flex gap-1"><dt>Remaining</dt><dd className="font-semibold text-ink">{f.money(p.remaining)}</dd></div>
@@ -1485,7 +1530,7 @@ function ChampionCard({ e, isFinal }: { e: LeaderboardEntry; isFinal: boolean })
   return (
     <Card spot className="fg-gborder fg-wash h-full">
       <Pill tone="accent" className="uppercase tracking-[0.1em]"><Icon name="trophy" size={12} />{isFinal ? "Champion" : "Current #1 · provisional"}</Pill>
-      <div className="mt-3 break-all text-title text-ink">{e.maskedName}</div>
+      <div className="mt-4 flex items-center gap-4"><Avatar name={e.name} src={e.avatarUrl} size={64} /><div className="min-w-0 break-words text-title text-ink">{e.name}</div></div>
       <div className="mt-1 flex flex-wrap items-center gap-2 text-cell text-mute">
         <Flag code={e.countryCode} />{e.city}
         {(e.movement !== 0 || e.previousRank === null) && (<><span aria-hidden="true">·</span><Movement movement={e.movement} previousRank={e.previousRank} /></>)}
@@ -1493,7 +1538,7 @@ function ChampionCard({ e, isFinal }: { e: LeaderboardEntry; isFinal: boolean })
       <div className={cn("mt-5 text-feat", GRAD_TEXT)}><CountUp value={e.brokerageSaved} format={f.money} /></div>
       <div className="mb-4 text-meta text-mute">brokerage saved</div>
       <AreaChart labels={e.trend.map((_, i) => `Day ${i + 1}`)} values={e.trend} formatY={f.compact} formatTip={(i) => `Day ${i + 1} · ${f.money(e.trend[i])}`} height={180}
-        ariaLabel={`Cumulative brokerage saved by ${e.maskedName} over 14 days, ending at ${f.money(e.brokerageSaved)}`} />
+        ariaLabel={`Cumulative brokerage saved by ${e.name} over 14 days, ending at ${f.money(e.brokerageSaved)}`} />
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[["Saved", f.money(e.brokerageSaved)], ["Trades", f.num(e.tradesCount)], ["Turnover", f.compact(e.turnover)], ["Top segment", e.topSegment]].map(([l, v]) => (
           <div key={l} className="min-w-0 rounded-xl border border-hairline bg-alt p-3">
@@ -1538,9 +1583,9 @@ function WinnersSection({ d }: { d: Landing }) {
                 <p className="mb-3 mt-1 text-meta text-mute">{x.isFinal ? "Rank, prize and brokerage saved" : "Rank, prize at stake and brokerage saved"}</p>
                 <ol aria-label={x.heading} className="fg-scroll -mx-2 min-h-0 flex-1 overflow-y-auto px-2">
                   {x.winners.map((m) => (
-                    <li key={m.rank} className="grid grid-cols-[28px_1fr_auto] items-center gap-x-3 rounded-xl border-b border-hairline px-2 py-3 transition-colors hover:bg-accent/10">
-                      <span className={cn(rankBadge(m.rank, true), "row-span-2")}>{m.rank}</span>
-                      <span className="flex items-center gap-2 text-cell font-medium tracking-wide text-ink">{m.maskedName}<Flag code={m.countryCode} size={14} /></span>
+                    <li key={m.rank} className="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 rounded-xl border-b border-hairline px-2 py-3 transition-colors hover:bg-accent/10">
+                      <span className="row-span-2 flex items-center gap-3"><span className={rankBadge(m.rank, true)}>{m.rank}</span><Avatar name={m.name} src={m.avatarUrl} size={36} /></span>
+                      <span className="flex items-center gap-2 text-cell font-medium text-ink">{m.name}<Flag code={m.countryCode} size={14} /></span>
                       <span className="row-span-2 text-cell font-semibold tabular-nums text-ink">{f.money(m.brokerageSaved)}</span>
                       <span className="text-meta text-faint">{m.prize}</span>
                     </li>
@@ -1566,7 +1611,7 @@ function WinnersSection({ d }: { d: Landing }) {
                     <ul className="mt-4" aria-label={`${ed.title} podium`}>
                       {ed.podium.map((m) => (
                         <li key={m.rank} className="flex h-12 items-center justify-between gap-3 border-b border-hairline text-cell last:border-0">
-                          <span className="flex items-center gap-3"><span className={rankBadge(m.rank, true)}>{m.rank}</span><span className="font-medium tracking-wide text-ink">{m.maskedName}</span></span>
+                          <span className="flex items-center gap-3"><span className={rankBadge(m.rank, true)}>{m.rank}</span><span className="font-medium text-ink">{m.name}</span></span>
                           <b className="font-semibold tabular-nums text-ink">{f.money(m.brokerageSaved)}</b>
                         </li>
                       ))}
@@ -1766,6 +1811,7 @@ function FaqSection({ d }: { d: Landing }) {
 
 /* ═══════════════════════════ CTA + FOOTER ═══════════════════════════════ */
 function CtaBand({ declared }: { declared: boolean }) {
+  const auth = useAuth();
   return (
     <section id="join" aria-labelledby="join-title" className="border-t border-hairline py-16 md:py-24">
       <div className={WRAP}>
@@ -1775,7 +1821,7 @@ function CtaBand({ declared }: { declared: boolean }) {
             <span aria-hidden="true" className="absolute -bottom-24 -right-16 -z-10 size-72 animate-[f-drift2_17s_ease-in-out_infinite_alternate] rounded-full bg-white/20 blur-3xl" />
             <h2 id="join-title" className="mx-auto max-w-[16ch] text-title">{declared ? "See you in the next pool." : BRAND.tagline}</h2>
             <p className="mx-auto mt-4 max-w-[480px] text-body text-white/85">{declared ? "Follow along for the next edition and be first in line to join." : "Trade the way you already do. Let the pool pay your brokerage, and see how high you can climb."}</p>
-            <div className="mt-8 flex justify-center"><Button variant="white" size="lg" href={URLS.join}>{declared ? "Get notified" : "Join the pool"}</Button></div>
+            <div className="mt-8 flex justify-center"><Button variant="white" size="lg" href={URLS.join} onClick={(e) => { e.preventDefault(); auth.user ? auth.openModal("card") : auth.openModal("join"); }}>{declared ? "Get notified" : auth.user ? "Share my rank card" : "Join the pool"}</Button></div>
             <p className="mt-4 text-meta text-white/85">Existing customers are already part of the pool.</p>
           </div>
         </Reveal>
@@ -1785,6 +1831,7 @@ function CtaBand({ declared }: { declared: boolean }) {
 }
 
 function Footer({ d, mode, onToggle, declared }: { d: Landing; mode: Mode; onToggle: () => void; declared: boolean }) {
+  const auth = useAuth();
   const c = d.competition.data;
   const year = c ? new Date(c.startsAt).getUTCFullYear() : null;
   const link = "inline-flex min-h-8 items-center text-body text-mute transition-colors hover:text-accent";
@@ -1799,7 +1846,7 @@ function Footer({ d, mode, onToggle, declared }: { d: Landing; mode: Mode; onTog
           <nav aria-label="Explore"><h4 className="mb-3 text-label uppercase text-faint">Explore</h4>
             <ul className="grid"><li><a className={link} href="#leaderboard">Leaderboard</a></li><li><a className={link} href="#winners">{declared ? "Winners" : "Current leaders"}</a></li><li><a className={link} href="#prizes">Prizes</a></li><li><a className={link} href="#how">How to enter</a></li></ul></nav>
           <nav aria-label="Support"><h4 className="mb-3 text-label uppercase text-faint">Support</h4>
-            <ul className="grid"><li><a className={link} href="#rules">Contest rules</a></li><li><a className={link} href="#faq">FAQs</a></li><li><a className={link} href={URLS.login}>Log in</a></li><li><a className={link} href={URLS.join}>Join the pool</a></li></ul></nav>
+            <ul className="grid"><li><a className={link} href="#rules">Contest rules</a></li><li><a className={link} href="#faq">FAQs</a></li><li><a className={link} href={URLS.login} onClick={(e) => { e.preventDefault(); auth.openModal("join"); }}>Log in</a></li><li><a className={link} href={URLS.join} onClick={(e) => { e.preventDefault(); auth.openModal("join"); }}>Join the pool</a></li></ul></nav>
           <div className="col-span-2 lg:col-span-1"><h4 className="mb-3 text-label uppercase text-faint">Partners</h4>
             {c ? (<ul className="grid gap-3">{c.partners.map((p) => (<li key={p.name} className="text-body text-mute">{p.name}<span className="block text-meta text-faint">{p.role}</span></li>))}</ul>) : (<div className="grid gap-3"><Sk w={140} h={16} /><Sk w={180} h={16} /></div>)}
           </div>
@@ -1836,11 +1883,6 @@ function ThemeStudio({ palette, mode, setPalette }: { palette: Palette; mode: Mo
 
 /* ═══════════════════════════ PAGE ═══════════════════════════════════════ */
 export default function Page() {
-  const d = useLandingData();
-  const cur = d.competition.data?.currency;
-  const fmt = useMemo(() => makeFmt(cur), [cur]);
-  const declared = d.competition.data?.status === "winners_declared";
-
   const [mode, setMode] = useState<Mode>("light");
   useLayoutEffect(() => {
     setMode(document.documentElement.classList.contains("dark") ? "dark" : "light");
@@ -1860,25 +1902,40 @@ export default function Page() {
   const css = useMemo(() => themeCss(palette), [palette]);
 
   return (
+    <div className={cn("fogm min-h-screen overflow-x-clip bg-bg font-sans text-body text-ink antialiased tabular-nums", fontInter.variable)}>
+      <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} suppressHydrationWarning />
+      <style dangerouslySetInnerHTML={{ __html: css }} />
+      {/* AuthProvider sits inside .fogm so the join modal inherits the theme tokens */}
+      <AuthProvider>
+        <PageContent mode={mode} onToggle={toggle} />
+      </AuthProvider>
+      {SHOW_THEME_STUDIO && <ThemeStudio palette={palette} mode={mode} setPalette={setPalette} />}
+    </div>
+  );
+}
+
+function PageContent({ mode, onToggle }: { mode: Mode; onToggle: () => void }) {
+  const { user } = useAuth();
+  const sessionKey = user ? `${user.id}|${user.name}|${user.avatarUrl ?? ""}|${user.publicConsent}` : "anon";
+  const d = useLandingData(sessionKey);
+  const cur = d.competition.data?.currency;
+  const fmt = useMemo(() => makeFmt(cur), [cur]);
+  const declared = d.competition.data?.status === "winners_declared";
+  return (
     <FmtCtx.Provider value={fmt}>
-      <div className={cn("fogm min-h-screen overflow-x-clip bg-bg font-sans text-body text-ink antialiased tabular-nums", fontInter.variable)}>
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} suppressHydrationWarning />
-        <style dangerouslySetInnerHTML={{ __html: css }} />
-        <Nav mode={mode} onToggle={toggle} declared={declared} />
-        <main id="main">
-          <Hero d={d} />
-          <TickerStrip d={d} />
-          <LeaderboardSection d={d} />
-          <PoolSection d={d} />
-          <WinnersSection d={d} />
-          <PrizesSection d={d} />
-          <HowSection d={d} />
-          <FaqSection d={d} />
-          <CtaBand declared={declared} />
-        </main>
-        <Footer d={d} mode={mode} onToggle={toggle} declared={declared} />
-        {SHOW_THEME_STUDIO && <ThemeStudio palette={palette} mode={mode} setPalette={setPalette} />}
-      </div>
+      <Nav mode={mode} onToggle={onToggle} declared={declared} />
+      <main id="main">
+        <Hero d={d} />
+        <TickerStrip d={d} />
+        <LeaderboardSection d={d} />
+        <PoolSection d={d} />
+        <WinnersSection d={d} />
+        <PrizesSection d={d} />
+        <HowSection d={d} />
+        <FaqSection d={d} />
+        <CtaBand declared={declared} />
+      </main>
+      <Footer d={d} mode={mode} onToggle={onToggle} declared={declared} />
     </FmtCtx.Provider>
   );
 }

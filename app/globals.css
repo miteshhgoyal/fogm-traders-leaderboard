@@ -141,3 +141,7 @@ body { background: var(--background, #fff); }
   .fg-draw { stroke-dashoffset: 0; transition: none; }
   .fg-bar { transform: scaleX(var(--p, 0)); transition: none; }
 }
+
+/* join modal */
+@keyframes f-fadein { from { opacity: 0; } to { opacity: 1; } }
+@keyframes f-modalin { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }

@@ -29,10 +29,10 @@ export type PrizeTierId = "grand" | "podium" | "laptop";
 export interface Competition {
   id: string;
   slug: string;
-  title: string; // "₹1 Cr Pride Pool"
+  title: string; // "$120K Pride Pool"
   subtitle: string; // one-line pitch
   status: ContestStatus;
-  currency: { code: string; locale: string }; // INR / en-IN
+  currency: { code: string; locale: string }; // USD / en-US
   registrationClosesAt: string;
   startsAt: string;
   endsAt: string;
@@ -60,7 +60,11 @@ export interface LeaderboardEntry {
   rank: number;
   previousRank: number | null;
   movement: number; // +ve = moved up
-  maskedName: string;
+  userId: string;
+  /** Public display name. "Anonymous trader" when the user has not consented. */
+  name: string;
+  /** Public photo URL, or null (initials fallback). Always null when not consented. */
+  avatarUrl: string | null;
   countryCode: string;
   city: string;
   brokerageSaved: number; // THE ranking metric
@@ -103,7 +107,9 @@ export interface WinnersPayload {
   declaredAt: string | null;
   winners: {
     rank: number;
-    maskedName: string;
+    userId: string;
+    name: string;
+    avatarUrl: string | null;
     countryCode: string;
     brokerageSaved: number;
     prize: string;
@@ -112,7 +118,8 @@ export interface WinnersPayload {
 }
 export interface ActivityItem {
   id: string;
-  maskedName: string;
+  name: string;
+  avatarUrl: string | null;
   amount: number;
   segment: Segment;
   at: string;
@@ -133,7 +140,7 @@ export interface PastEdition {
   period: string;
   poolSize: number;
   tradersEnrolled: number;
-  podium: { rank: 1 | 2 | 3; maskedName: string; brokerageSaved: number }[];
+  podium: { rank: 1 | 2 | 3; name: string; brokerageSaved: number }[];
 }
 export interface ContentPayload {
   steps: { title: string; body: string }[];
@@ -147,10 +154,10 @@ interface MoneyOpts {
   code?: string;
   locale?: string;
 }
-const DEFAULT_CODE = "INR";
-const DEFAULT_LOCALE = "en-IN";
+const DEFAULT_CODE = "USD";
+const DEFAULT_LOCALE = "en-US";
 
-export function formatINR(n: number, opts?: MoneyOpts): string {
+export function formatMoney(n: number, opts?: MoneyOpts): string {
   return new Intl.NumberFormat(opts?.locale ?? DEFAULT_LOCALE, {
     style: "currency",
     currency: opts?.code ?? DEFAULT_CODE,
@@ -162,28 +169,26 @@ export function formatNumber(n: number, locale: string = DEFAULT_LOCALE): string
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(n);
 }
 
-/** "₹1 Cr", "₹29.9 L", "₹12,450". Cr/L are the Indian numbering units. */
-export function formatCompactINR(n: number, opts?: MoneyOpts): string {
-  const locale = opts?.locale ?? DEFAULT_LOCALE;
-  const code = opts?.code ?? DEFAULT_CODE;
-  const symbol =
-    new Intl.NumberFormat(locale, { style: "currency", currency: code })
-      .formatToParts(0)
-      .find((p) => p.type === "currency")?.value ?? "";
-  const trim = (v: number) =>
-    new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(v);
-  const abs = Math.abs(n);
-  const sign = n < 0 ? "-" : "";
-  if (abs >= 1e7) return `${sign}${symbol}${trim(abs / 1e7)} Cr`;
-  if (abs >= 1e5) return `${sign}${symbol}${trim(abs / 1e5)} L`;
-  return formatINR(n, opts);
+/** "$120.5K", "$3.6M", "$178". Intl compact notation (K / M / B). */
+export function formatCompactMoney(n: number, opts?: MoneyOpts): string {
+  return new Intl.NumberFormat(opts?.locale ?? DEFAULT_LOCALE, {
+    style: "currency",
+    currency: opts?.code ?? DEFAULT_CODE,
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(n);
 }
 
-/** First 2 chars, stars, last 2 chars. "SURESHKUMAR" → "SU*******AR". */
-export function maskName(s: string): string {
-  const t = s.trim().toUpperCase();
-  if (t.length <= 4) return t.slice(0, 1) + "*".repeat(Math.max(t.length - 1, 0));
-  return t.slice(0, 2) + "*".repeat(t.length - 4) + t.slice(-2);
+/** Display name used for anyone who has not opted in to the public leaderboard. */
+export const ANON_NAME = "Anonymous trader";
+
+/** Up to two initials. "Anonymous trader" → "AT". */
+export function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  const first = parts[0][0] ?? "";
+  const last = parts.length > 1 ? (parts[parts.length - 1][0] ?? "") : "";
+  return (first + last).toUpperCase();
 }
 
 export function timeAgo(iso: string, nowMs: number = Date.now()): string {
@@ -221,15 +226,21 @@ const SEGMENTS: Segment[] = [
   "Currency",
 ];
 
+/** The mock data is authored in INR; every money value is converted once, here. */
+export const MOCK_FX_INR_PER_USD = 83;
+const usd = (inr: number) => Math.round(inr / MOCK_FX_INR_PER_USD);
+
 const FIRST = [
-  "SHARAD", "BHAVESH", "SURESH", "RAHUL", "PRIYA", "ANKIT", "KARAN", "NEHA", "VIKAS",
-  "MANOJ", "DEEPAK", "POOJA", "ROHIT", "SANJAY", "ARJUN", "KIRAN", "NITIN", "ASHOK",
-  "MEERA", "TARUN", "HARSH", "JAYESH", "LAKSHMI", "OMKAR", "YASHWANT",
+  "Sharad", "Bhavesh", "Suresh", "Rahul", "Priya", "Ankit", "Karan", "Neha", "Vikas",
+  "Manoj", "Deepak", "Pooja", "Rohit", "Sanjay", "Arjun", "Kiran", "Nitin", "Ashok",
+  "Meera", "Tarun", "Harsh", "Jayesh", "Lakshmi", "Omkar", "Yashwant",
 ];
 const LAST = [
-  "KUMAR", "SHARMA", "PATEL", "VERMA", "GUPTA", "REDDY", "NAIR", "SINGH", "IYER",
-  "JOSHI", "MEHTA", "DESAI",
+  "Kumar", "Sharma", "Patel", "Verma", "Gupta", "Reddy", "Nair", "Singh", "Iyer",
+  "Joshi", "Mehta", "Desai",
 ];
+/** Mock traders (by identity index) who have NOT ticked the public-consent box. */
+const NON_CONSENTING = new Set([8, 19, 33]);
 const CITIES: [string, string][] = [
   ["Mumbai", "IN"], ["Delhi", "IN"], ["Bengaluru", "IN"], ["Hyderabad", "IN"],
   ["Chennai", "IN"], ["Pune", "IN"], ["Kolkata", "IN"], ["Ahmedabad", "IN"],
@@ -239,29 +250,41 @@ const CITIES: [string, string][] = [
 ];
 
 interface Identity {
-  maskedName: string;
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
   city: string;
   countryCode: string;
   segment: Segment;
 }
 const IDENTITIES: Identity[] = (() => {
   const rnd = mulberry32(7);
+  const seen = new Set<string>();
   return Array.from({ length: 50 }, (_, i) => {
-    const raw = FIRST[i % FIRST.length] + LAST[(i * 5 + Math.floor(i / 25)) % LAST.length];
+    let step = 0;
+    let full = "";
+    do {
+      full = `${FIRST[i % FIRST.length]} ${LAST[(i * 5 + Math.floor(i / 25) + step) % LAST.length]}`;
+      step++;
+    } while (seen.has(full));
+    seen.add(full);
     // mostly India, a handful abroad
     const abroad = i === 11 || i === 29 || i === 41;
     const pick = abroad
       ? CITIES[15 + (i % 2)]
       : CITIES[Math.floor(rnd() * 15)];
     return {
-      maskedName: maskName(raw),
+      userId: `u_mock_${i}`,
+      name: NON_CONSENTING.has(i) ? ANON_NAME : full,
+      avatarUrl: null,
       city: pick[0],
       countryCode: pick[1],
       segment: SEGMENTS[Math.floor(rnd() * 4)],
     };
   });
 })();
-const YOU_INDEX = 26; // overall rank #27 is "you" in the mock
+const YOU_INDEX = 26; // overall rank #27 is where the signed-in user lands in the mock
+const YOU_ID = `u_mock_${YOU_INDEX}`;
 
 /** Values descending from `top` to `bottom` over `n` entries, rounded to `step`. */
 function curve(n: number, top: number, bottom: number, step: number, seed: number): number[] {
@@ -277,11 +300,17 @@ function curve(n: number, top: number, bottom: number, step: number, seed: numbe
   return out;
 }
 
+/** Whole-dollar values must stay strictly descending after rounding. */
+function strictDesc(v: number[]): number[] {
+  const out: number[] = [];
+  v.forEach((x, i) => out.push(i === 0 ? x : Math.max(1, Math.min(x, out[i - 1] - 1))));
+  return out;
+}
+
 const OVERALL_VALUES: number[] = (() => {
-  const anchors = [14760, 13000, 9080, 8380, 7700, 7300, 6440, 5040];
-  const rest = curve(42, 4800, 1800, 10, 31);
-  rest[rest.length - 1] = 1800;
-  return [...anchors, ...rest];
+  const anchors = [14760, 13000, 9080, 8380, 7700, 7300, 6440, 5040].map(usd);
+  const rest = curve(42, usd(4800), usd(1800), 1, 31);
+  return strictDesc([...anchors, ...rest]);
 })();
 
 function buildBoard(period: Period): LeaderboardEntry[] {
@@ -298,8 +327,8 @@ function buildBoard(period: Period): LeaderboardEntry[] {
     period === "overall"
       ? OVERALL_VALUES
       : period === "week"
-        ? curve(50, 1850, 240, 5, 41)
-        : curve(50, 420, 40, 5, 51);
+        ? strictDesc(curve(50, 110, 28, 1, 41))
+        : strictDesc(curve(50, 80, 26, 1, 51));
   const scale = period === "overall" ? 1 : period === "week" ? 0.14 : 0.03;
 
   return order.map((idIdx, k) => {
@@ -329,7 +358,9 @@ function buildBoard(period: Period): LeaderboardEntry[] {
       rank,
       previousRank: prev,
       movement,
-      maskedName: id.maskedName,
+      userId: id.userId,
+      name: id.name,
+      avatarUrl: id.avatarUrl,
       countryCode: id.countryCode,
       city: id.city,
       brokerageSaved: saved,
@@ -341,13 +372,12 @@ function buildBoard(period: Period): LeaderboardEntry[] {
       trend,
       prizeTierId: tier,
       inWinningZone: rank <= 20,
-      ...(idIdx === YOU_INDEX ? { isYou: true } : {}),
     };
   });
 }
 
-const USED = 298913;
-const POOL_SIZE = 10000000;
+const USED = usd(298913);
+const POOL_SIZE = usd(10000000);
 const BENEFITED = 411;
 
 const HISTORY: PoolHistoryPoint[] = (() => {
@@ -378,11 +408,11 @@ export const MOCK_DB = {
   competition: {
     id: "cmp_pride_pool_2026",
     slug: "pride-pool",
-    title: "₹1 Cr Pride Pool",
+    title: "$120K Pride Pool",
     subtitle:
-      "Trade as you normally do. We refund your brokerage from a ₹1 Cr pool, and the traders who save the most win laptops and VIP access.",
+      "Trade as you normally do. We refund your brokerage from a $120K pool, and the traders who save the most win laptops and VIP access.",
     status: "active",
-    currency: { code: "INR", locale: "en-IN" },
+    currency: { code: "USD", locale: "en-US" },
     registrationClosesAt: "2026-12-15T18:29:59.000Z",
     startsAt: "2026-10-01T03:30:00.000Z",
     endsAt: "2026-12-31T18:29:59.000Z",
@@ -401,13 +431,13 @@ export const MOCK_DB = {
     poolSize: POOL_SIZE,
     used: USED,
     remaining: POOL_SIZE - USED,
-    usedPct: 2.98,
+    usedPct: Math.round((USED / POOL_SIZE) * 10000) / 100,
     tradersEnrolled: 4103,
     tradersBenefited: BENEFITED,
     totalTrades: 38240,
-    totalTurnover: 421500000,
+    totalTurnover: usd(421500000),
     avgSavedPerBeneficiary: Math.round(USED / BENEFITED),
-    largestSingleSaving: 1850,
+    largestSingleSaving: usd(1850),
   } as PoolStats,
 
   leaderboard: {
@@ -450,43 +480,43 @@ export const MOCK_DB = {
   pastEditions: [
     {
       id: "ed_launch_2026",
-      title: "₹50 L Launch Pool",
+      title: "$60K Launch Pool",
       period: "Apr – Jun 2026",
-      poolSize: 5000000,
+      poolSize: usd(5000000),
       tradersEnrolled: 2284,
       podium: [
-        { rank: 1, maskedName: "RA******TA", brokerageSaved: 11840 },
-        { rank: 2, maskedName: "MA*****ER", brokerageSaved: 10215 },
-        { rank: 3, maskedName: "PR*******AL", brokerageSaved: 8760 },
+        { rank: 1, name: "Rakesh Malhotra", brokerageSaved: usd(11840) },
+        { rank: 2, name: "Manish Kapoor", brokerageSaved: usd(10215) },
+        { rank: 3, name: "Pranav Agarwal", brokerageSaved: usd(8760) },
       ],
     },
     {
       id: "ed_monsoon_2026",
-      title: "₹75 L Monsoon Pool",
+      title: "$90K Monsoon Pool",
       period: "Jul – Sep 2026",
-      poolSize: 7500000,
+      poolSize: usd(7500000),
       tradersEnrolled: 3310,
       podium: [
-        { rank: 1, maskedName: "VI*****AR", brokerageSaved: 15320 },
-        { rank: 2, maskedName: "AN*******HI", brokerageSaved: 12970 },
-        { rank: 3, maskedName: "SA****NG", brokerageSaved: 10480 },
+        { rank: 1, name: "Vikram Chawla", brokerageSaved: usd(15320) },
+        { rank: 2, name: "Anjali Bhatia", brokerageSaved: usd(12970) },
+        { rank: 3, name: "Sandeep Rao", brokerageSaved: usd(10480) },
       ],
     },
   ] as PastEdition[],
 
   activity: [
-    { id: "a1", maskedName: "SU***AR", amount: 420, segment: "Futures & Options", at: isoAt(120), kind: "saving" },
-    { id: "a2", maskedName: "NE****AL", amount: 0, segment: "Equity Intraday", at: isoAt(240), kind: "joined" },
-    { id: "a3", maskedName: "BH*****KI", amount: 310, segment: "Commodity", at: isoAt(420), kind: "saving" },
-    { id: "a4", maskedName: "RO****MA", amount: 0, segment: "Equity Intraday", at: isoAt(600), kind: "rank_up" },
-    { id: "a5", maskedName: "KA***AH", amount: 185, segment: "Currency", at: isoAt(900), kind: "saving" },
-    { id: "a6", maskedName: "DE*****AK", amount: 0, segment: "Futures & Options", at: isoAt(1260), kind: "joined" },
-    { id: "a7", maskedName: "SH*****AR", amount: 640, segment: "Futures & Options", at: isoAt(1680), kind: "saving" },
-    { id: "a8", maskedName: "PO****TA", amount: 0, segment: "Commodity", at: isoAt(2100), kind: "rank_up" },
-    { id: "a9", maskedName: "AR***AN", amount: 275, segment: "Equity Intraday", at: isoAt(2700), kind: "saving" },
-    { id: "a10", maskedName: "MA*****ER", amount: 0, segment: "Currency", at: isoAt(3300), kind: "joined" },
-    { id: "a11", maskedName: "TA***ER", amount: 520, segment: "Futures & Options", at: isoAt(4200), kind: "saving" },
-    { id: "a12", maskedName: "HA***EL", amount: 0, segment: "Equity Intraday", at: isoAt(5400), kind: "rank_up" },
+    { id: "a1", name: "Suresh Kumar", avatarUrl: null, amount: usd(420), segment: "Futures & Options", at: isoAt(120), kind: "saving" },
+    { id: "a2", name: "Neha Pillai", avatarUrl: null, amount: usd(0), segment: "Equity Intraday", at: isoAt(240), kind: "joined" },
+    { id: "a3", name: "Bhavna Joshi", avatarUrl: null, amount: usd(310), segment: "Commodity", at: isoAt(420), kind: "saving" },
+    { id: "a4", name: "Rohit Sharma", avatarUrl: null, amount: usd(0), segment: "Equity Intraday", at: isoAt(600), kind: "rank_up" },
+    { id: "a5", name: "Kabir Shah", avatarUrl: null, amount: usd(185), segment: "Currency", at: isoAt(900), kind: "saving" },
+    { id: "a6", name: "Deepak Sethi", avatarUrl: null, amount: usd(0), segment: "Futures & Options", at: isoAt(1260), kind: "joined" },
+    { id: "a7", name: "Sharad Kumar", avatarUrl: null, amount: usd(640), segment: "Futures & Options", at: isoAt(1680), kind: "saving" },
+    { id: "a8", name: "Pooja Gupta", avatarUrl: null, amount: usd(0), segment: "Commodity", at: isoAt(2100), kind: "rank_up" },
+    { id: "a9", name: "Arjun Nair", avatarUrl: null, amount: usd(275), segment: "Equity Intraday", at: isoAt(2700), kind: "saving" },
+    { id: "a10", name: "Manish Kapoor", avatarUrl: null, amount: usd(0), segment: "Currency", at: isoAt(3300), kind: "joined" },
+    { id: "a11", name: "Tarun Iyer", avatarUrl: null, amount: usd(520), segment: "Futures & Options", at: isoAt(4200), kind: "saving" },
+    { id: "a12", name: "Harsh Desai", avatarUrl: null, amount: usd(0), segment: "Equity Intraday", at: isoAt(5400), kind: "rank_up" },
   ] as ActivityItem[],
 
   poolHistory: HISTORY,
@@ -509,7 +539,7 @@ export const MOCK_DB = {
       },
       {
         title: "Trade as usual",
-        body: "Trade in any eligible segment exactly the way you always do. Every rupee of brokerage you pay is tracked and refunded from the pool until it runs out.",
+        body: "Trade in any eligible segment exactly the way you always do. Every dollar of brokerage you pay is tracked and refunded from the pool until it runs out.",
       },
       {
         title: "Climb the board",
@@ -520,7 +550,7 @@ export const MOCK_DB = {
       "Open to resident individuals aged 18+ with an active, KYC-complete account on the partner trading platform.",
       "You need at least 10 executed trades during the contest period to appear on the ranked board.",
       "Eligible segments: Equity Intraday, Futures & Options, Commodity and Currency.",
-      "Brokerage refunds are capped at ₹25,000 per trader for the whole contest.",
+      "Brokerage refunds are capped at $300 per trader for the whole contest.",
       "Fair-use applies. Wash, circular and self-matched trades are excluded, and abusive accounts are disqualified.",
       "Ties are broken by the earlier timestamp at which the tied amount was reached.",
       "Winners are verified for eligibility and fair-use before they are declared.",
@@ -553,9 +583,64 @@ export const MOCK_DB = {
       },
     ],
     disclosure:
-      "Trading in securities involves risk of loss. Past performance is not indicative of future results. Brokerage reimbursement is a promotional benefit funded from the contest pool and is subject to the contest terms, eligibility and fair-use checks. Nothing on this page is investment advice. Participant names are masked to protect privacy.",
+      "Trading in securities involves risk of loss. Past performance is not indicative of future results. Brokerage reimbursement is a promotional benefit funded from the contest pool and is subject to the contest terms, eligibility and fair-use checks. Nothing on this page is investment advice. Names and photos are shown only for traders who opted in to the public leaderboard; everyone else appears as \"Anonymous trader\".",
   } as ContentPayload,
 };
+
+/** Shape of GET /api/me (also what the client keeps in memory). `user` is null when signed out. */
+export interface MeUser {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl: string | null;
+  publicConsent: boolean;
+  country: string | null;
+  profileComplete: boolean;
+}
+export interface MeResponse {
+  user: MeUser | null;
+  entry: LeaderboardEntry | null;
+}
+
+/* ── Signed-in user (mock mode merges them into the board at rank 27) ───── */
+export interface SessionUser {
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+  publicConsent: boolean;
+  country?: string;
+}
+
+/** What the public may see: real name + photo only with consent. */
+export function publicIdentity(u: Pick<SessionUser, "name" | "avatarUrl" | "publicConsent">): {
+  name: string;
+  avatarUrl: string | null;
+} {
+  return u.publicConsent
+    ? { name: u.name, avatarUrl: u.avatarUrl }
+    : { name: ANON_NAME, avatarUrl: null };
+}
+
+let mockUser: SessionUser | null = null;
+/** Mock mode only: tell the mock API who is signed in. The real API reads the session cookie instead. */
+export function setMockSessionUser(u: SessionUser | null): void {
+  mockUser = u;
+}
+
+function withUser(e: LeaderboardEntry): LeaderboardEntry {
+  if (!mockUser || e.userId !== YOU_ID) return e;
+  return { ...e, userId: mockUser.userId, ...publicIdentity(mockUser), isYou: true };
+}
+
+/** Server helper (card + share page): the mock "overall" row for a user id. */
+export function mockEntryByUserId(userId: string, user?: SessionUser | null): LeaderboardEntry | null {
+  const board = MOCK_DB.leaderboard.overall;
+  if (user && user.userId === userId) {
+    const slot = board.find((e) => e.userId === YOU_ID);
+    return slot ? { ...slot, userId, ...publicIdentity(user), isYou: true } : null;
+  }
+  return board.find((e) => e.userId === userId) ?? null;
+}
 
 /* ── HTTP + mock plumbing ───────────────────────────────────────────────── */
 async function http<T>(path: string): Promise<T> {
@@ -602,14 +687,14 @@ export function getLeaderboard(p: {
       const shift = nowShift();
       const page = Math.max(1, p.page ?? 1);
       const pageSize = Math.max(1, p.pageSize ?? 20);
-      const all = MOCK_DB.leaderboard[p.period];
+      const all = MOCK_DB.leaderboard[p.period].map(withUser);
       const q = (p.search ?? "").trim().toLowerCase();
-      const filtered = q ? all.filter((e) => e.maskedName.toLowerCase().includes(q)) : all;
+      const filtered = q ? all.filter((e) => e.name.toLowerCase().includes(q)) : all;
       const rebase = (e: LeaderboardEntry): LeaderboardEntry => ({
         ...e,
         lastActiveAt: shiftISO(e.lastActiveAt, shift),
       });
-      const you = all.find((e) => e.isYou);
+      const you = mockUser ? all.find((e) => e.isYou) : undefined;
       return {
         period: p.period,
         total: filtered.length,
@@ -634,7 +719,7 @@ export function getWinners(): Promise<WinnersPayload> {
     return mock(() => {
       const c = MOCK_DB.competition;
       const isFinal = c.status === "winners_declared";
-      const top = MOCK_DB.leaderboard.overall.slice(0, 20);
+      const top = MOCK_DB.leaderboard.overall.map(withUser).slice(0, 20);
       const prizeOf = (rank: number) =>
         MOCK_DB.prizeTiers.find((t) => rank >= t.ranksFrom && rank <= t.ranksTo)?.reward ?? "";
       return {
@@ -643,7 +728,9 @@ export function getWinners(): Promise<WinnersPayload> {
         declaredAt: isFinal ? c.winnersDeclaredAt : null,
         winners: top.map((e) => ({
           rank: e.rank,
-          maskedName: e.maskedName,
+          userId: e.userId,
+          name: e.name,
+          avatarUrl: e.avatarUrl,
           countryCode: e.countryCode,
           brokerageSaved: e.brokerageSaved,
           prize: prizeOf(e.rank),
@@ -718,8 +805,13 @@ if (process.env.NODE_ENV !== "production") {
     );
   });
   console.assert(
-    new Set(leaderboard.overall.map((e) => e.maskedName)).size === leaderboard.overall.length,
-    "[api] masked names must be unique",
+    new Set(leaderboard.overall.filter((e) => e.name !== ANON_NAME).map((e) => e.name)).size ===
+      leaderboard.overall.filter((e) => e.name !== ANON_NAME).length,
+    "[api] public names must be unique",
+  );
+  console.assert(
+    leaderboard.overall.every((e) => e.name !== ANON_NAME || e.avatarUrl === null),
+    "[api] non-consenting traders must have no avatar",
   );
   console.assert(
     MOCK_DB.segmentBreakdown.reduce((s, x) => s + x.sharePct, 0) === 100,

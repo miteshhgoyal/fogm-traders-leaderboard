@@ -4,7 +4,6 @@ import { isObjectId } from "@/lib/rank";
 import { hit } from "@/lib/rate-limit";
 import { getSession } from "@/lib/session";
 
-export const runtime = "nodejs";
 
 export async function POST(req: Request): Promise<Response> {
   if (!sameOrigin(req)) return fail(403, "forbidden");

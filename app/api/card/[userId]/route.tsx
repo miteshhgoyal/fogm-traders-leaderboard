@@ -7,7 +7,6 @@ import { tierFor } from "@/lib/card-theme";
 import { CARD_SIZE, CardView, type CardData, type CardFormat } from "@/lib/card-view";
 import { resolveEntry } from "@/lib/rank";
 
-export const runtime = "nodejs";
 
 const CACHE = "public, s-maxage=300, stale-while-revalidate=600";
 

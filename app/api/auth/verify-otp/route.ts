@@ -7,7 +7,6 @@ import { User } from "@/lib/models/User";
 import { clientIp, hit } from "@/lib/rate-limit";
 import { createSession } from "@/lib/session";
 
-export const runtime = "nodejs";
 
 const Body = z.object({ email: z.string().trim().toLowerCase().email().max(254), code: z.string().regex(/^\d{6}$/) });
 const MAX_ATTEMPTS = 5;

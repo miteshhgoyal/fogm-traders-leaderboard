@@ -6,7 +6,6 @@ import { sendOtpEmail } from "@/lib/mail";
 import { OtpCode } from "@/lib/models/OtpCode";
 import { clientIp, hit } from "@/lib/rate-limit";
 
-export const runtime = "nodejs";
 
 const Body = z.object({ email: z.string().trim().toLowerCase().email().max(254) });
 const OTP_TTL_MS = 10 * 60 * 1000;

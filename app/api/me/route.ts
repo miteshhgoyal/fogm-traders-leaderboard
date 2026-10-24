@@ -7,7 +7,6 @@ import { User } from "@/lib/models/User";
 import { getRankEntry, isObjectId, toSessionUser } from "@/lib/rank";
 import { clearSession, getSession } from "@/lib/session";
 
-export const runtime = "nodejs";
 
 const SIGNED_OUT: MeResponse = { user: null, entry: null };
 

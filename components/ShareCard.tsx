@@ -63,7 +63,7 @@ export default function ShareCard({ userId, rank, siteUrl }: ShareCardProps) {
   }, []);
 
   const pageUrl = `${origin}/u/${encodeURIComponent(userId)}`;
-  const text = rank ? `I'm #${rank} in the Pride Pool 🏆` : "I'm on the Pride Pool leaderboard 🏆";
+  const text = rank ? `I'm ranked #${rank} in the FOGM Trading Championship 🏆` : "I'm ranked in the FOGM Trading Championship 🏆";
   const enc = encodeURIComponent;
   const links = [
     { key: "x", label: "Share on X", href: `https://twitter.com/intent/tweet?text=${enc(text)}&url=${enc(pageUrl)}`, name: "X" },
@@ -127,7 +127,7 @@ export default function ShareCard({ userId, rank, siteUrl }: ShareCardProps) {
           {/* eslint-disable-next-line @next/next/no-img-element -- dynamic OG image, already sized by the route */}
           <img
             src={`/api/card/${encodeURIComponent(userId)}?format=story`}
-            alt={rank ? `Your rank card: #${rank} in the Pride Pool` : "Your rank card"}
+            alt={rank ? `Your rank card: #${rank} in the FOGM Trading Championship` : "Your rank card"}
             width={1080}
             height={1350}
             onLoad={() => setLoaded(true)}

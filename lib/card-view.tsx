@@ -140,9 +140,9 @@ export function CardView({ d, format }: { d: CardData; format: CardFormat }) {
 
   const stats = (
     <div style={flex({ gap: story ? 20 : 12, width: "100%" })}>
-      <StatBox label="Saved" value={d.savedText} big={story} />
+      <StatBox label="Net profit" value={d.savedText} big={story} />
       <StatBox label="Trades" value={d.tradesText} big={story} />
-      <StatBox label="Top segment" value={d.topSegment} big={story} />
+      <StatBox label="Instrument" value={d.topSegment} big={story} />
     </div>
   );
 

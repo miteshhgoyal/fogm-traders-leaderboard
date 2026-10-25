@@ -13,8 +13,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { userId } = await params;
   const entry = await resolveEntry(userId);
   if (!entry) return { title: "Rank card not found" };
-  const title = `I'm ranked #${entry.rank} in the Pride Pool`;
-  const description = "Trade as usual, save brokerage, climb the board. See the live Pride Pool leaderboard and join in.";
+  const title = `I'm ranked #${entry.rank} in the FOGM Trading Championship 🏆`;
+  const description = "Trade forex, gold and indices on live accounts. The best performers climb the board and win.";
   const image = `${SITE}/api/card/${encodeURIComponent(userId)}?format=og`;
   return {
     metadataBase: SITE ? new URL(SITE) : undefined,
@@ -43,23 +43,23 @@ async function ShareContent({ params }: Props) {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-[560px] flex-col items-center justify-center gap-8 px-5 py-16 text-center font-sans">
       <h1 className="text-[clamp(26px,5vw,36px)] font-semibold leading-[1.15] tracking-[-0.025em]">
-        {entry.name} is ranked #{entry.rank} in the Pride Pool
+        {entry.name} is ranked #{entry.rank} in the FOGM Trading Championship
       </h1>
       {/* eslint-disable-next-line @next/next/no-img-element -- dynamic OG image */}
       <img
         src={`/api/card/${encodeURIComponent(userId)}?format=story`}
-        alt={`Rank card: #${entry.rank} in the Pride Pool`}
+        alt={`Rank card: #${entry.rank} in the FOGM Trading Championship`}
         width={1080}
         height={1350}
         className="h-auto w-full max-w-[360px] rounded-2xl border border-black/10 shadow-xl"
       />
       <div className="flex flex-wrap items-center justify-center gap-3">
         <Link
-          href="/#join"
+          href="/"
           className={`${btn} focus-visible:ring-black`}
           style={{ background: `linear-gradient(135deg, ${ACCENT.a}, ${ACCENT.b})`, color: ACCENT.ink }}
         >
-          Join the pool
+          See your rank →
         </Link>
         <Link href="/#leaderboard" className={`${btn} border border-black/15 focus-visible:ring-black`}>
           View the leaderboard

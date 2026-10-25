@@ -50,10 +50,17 @@ export async function POST(req: Request): Promise<Response> {
   const country = req.headers.get("x-vercel-ip-country") ?? req.headers.get("cf-ipcountry");
   const user = await User.findOneAndUpdate(
     { email },
-    { $setOnInsert: { email, name: "", avatarUrl: null, publicConsent: false, profileComplete: false, country: country && country !== "XX" ? country : null } },
+    { $setOnInsert: { email, name: "", avatarUrl: null, showName: true, showPhoto: true, profileComplete: false, country: country && country !== "XX" ? country : null } },
     { upsert: true, new: true },
   );
   if (!user) return fail(500, "server");
-  await createSession({ userId: String(user._id), email: user.email });
+
+  // Update login tracking
+  await User.findByIdAndUpdate(user._id, {
+    $inc: { loginCount: 1 },
+    $set: { lastLoginAt: new Date() },
+  });
+
+  await createSession({ userId: String(user._id), email: user.email, sessionVersion: user.sessionVersion ?? 0 });
   return json({ ok: true, profileComplete: user.profileComplete });
 }

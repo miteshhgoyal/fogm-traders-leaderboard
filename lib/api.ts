@@ -19,47 +19,46 @@ export type ContestStatus =
   | "ended"
   | "winners_declared";
 export type Period = "today" | "week" | "overall";
-export type Segment =
-  | "Equity Intraday"
-  | "Futures & Options"
-  | "Commodity"
-  | "Currency";
+export type InstrumentClass =
+  | "Majors"
+  | "Minors"
+  | "Exotics"
+  | "Metals"
+  | "Indices"
+  | "Crypto";
 export type PrizeTierId = "grand" | "podium" | "laptop";
 
 export interface Competition {
   id: string;
   slug: string;
-  title: string; // "$120K Pride Pool"
-  subtitle: string; // one-line pitch
+  title: string;
+  subtitle: string;
   status: ContestStatus;
-  currency: { code: string; locale: string }; // USD / en-US
+  currency: { code: string; locale: string };
   registrationClosesAt: string;
   startsAt: string;
   endsAt: string;
-  winnersDeclaredAt: string | null; // ISO
-  metricLabel: string; // "Brokerage Saved"
-  metricHelp: string; // plain-language definition shown in a tooltip/info row
-  partners: { name: string; role: string }[]; // text only, no logos
-  updatedAt: string; // ISO, "Last updated" stamp
+  winnersDeclaredAt: string | null;
+  metricLabel: string;
+  metricHelp: string;
+  partners: { name: string; role: string }[];
+  updatedAt: string;
 }
 
-export interface PoolStats {
-  poolSize: number;
-  used: number;
-  remaining: number;
-  usedPct: number; // remaining = poolSize - used (must be consistent)
+export interface ContestStats {
+  prizeFund: number;
   tradersEnrolled: number;
-  tradersBenefited: number;
+  activeTraders: number;
   totalTrades: number;
-  totalTurnover: number; // sum of traded value
-  avgSavedPerBeneficiary: number;
-  largestSingleSaving: number;
+  totalVolumeLots: number;
+  avgReturnPct: number;
+  bestTradeProfit: number;
 }
 
 export interface LeaderboardEntry {
   rank: number;
   previousRank: number | null;
-  movement: number; // +ve = moved up
+  movement: number;
   userId: string;
   /** Public display name. "Anonymous trader" when the user has not consented. */
   name: string;
@@ -67,15 +66,17 @@ export interface LeaderboardEntry {
   avatarUrl: string | null;
   countryCode: string;
   city: string;
-  brokerageSaved: number; // THE ranking metric
-  brokeragePaid: number; // what they paid in total
+  netProfit: number; // THE ranking metric
+  returnPct: number;
+  winRatePct: number;
+  maxDrawdownPct: number;
   tradesCount: number;
-  turnover: number;
-  topSegment: Segment;
+  volumeLots: number;
+  topInstrument: string;
   lastActiveAt: string;
-  trend: number[]; // 14 points, cumulative saved, for sparkline
+  trend: number[]; // 14 points, cumulative profit, for sparkline
   prizeTierId: PrizeTierId | null;
-  inWinningZone: boolean; // rank <= 20
+  inWinningZone: boolean;
   isYou?: boolean;
 }
 
@@ -86,7 +87,7 @@ export interface LeaderboardPage {
   pageSize: number;
   entries: LeaderboardEntry[];
   cutoffRank: number;
-  cutoffSaved: number;
+  cutoffValue: number;
   updatedAt: string;
   /** Optional: the signed-in user's row (independent of the current page / search). */
   you?: LeaderboardEntry | null;
@@ -101,6 +102,7 @@ export interface PrizeTier {
   perks: string[];
   winnersCount: number;
 }
+
 export interface WinnersPayload {
   isFinal: boolean;
   heading: string;
@@ -111,37 +113,42 @@ export interface WinnersPayload {
     name: string;
     avatarUrl: string | null;
     countryCode: string;
-    brokerageSaved: number;
+    netProfit: number;
     prize: string;
   }[];
   champion: LeaderboardEntry | null;
 }
+
 export interface ActivityItem {
   id: string;
   name: string;
   avatarUrl: string | null;
   amount: number;
-  segment: Segment;
+  instrument: string;
   at: string;
-  kind: "saving" | "rank_up" | "joined";
+  kind: "trade_win" | "rank_up" | "joined";
 }
-export interface PoolHistoryPoint {
+
+export interface EquityPoint {
   date: string;
-  used: number;
+  totalProfit: number;
 }
-export interface SegmentBreakdown {
-  segment: Segment;
-  saved: number;
+
+export interface InstrumentBreakdown {
+  instrumentClass: InstrumentClass;
+  volumeLots: number;
   sharePct: number;
 }
+
 export interface PastEdition {
   id: string;
   title: string;
   period: string;
-  poolSize: number;
+  prizeFund: number;
   tradersEnrolled: number;
-  podium: { rank: 1 | 2 | 3; name: string; brokerageSaved: number }[];
+  podium: { rank: 1 | 2 | 3; name: string; netProfit: number }[];
 }
+
 export interface ContentPayload {
   steps: { title: string; body: string }[];
   rules: string[];
@@ -219,34 +226,32 @@ const MOCK_NOW_MS = Date.parse("2026-10-24T14:00:00.000Z");
 const isoAt = (offsetSec: number) =>
   new Date(MOCK_NOW_MS - offsetSec * 1000).toISOString();
 
-const SEGMENTS: Segment[] = [
-  "Equity Intraday",
-  "Futures & Options",
-  "Commodity",
-  "Currency",
+const INSTRUMENTS = [
+  "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD",
+  "XAUUSD", "US30", "NAS100", "BTCUSD",
 ];
 
-/** The mock data is authored in INR; every money value is converted once, here. */
-export const MOCK_FX_INR_PER_USD = 83;
-const usd = (inr: number) => Math.round(inr / MOCK_FX_INR_PER_USD);
-
-const FIRST = [
-  "Sharad", "Bhavesh", "Suresh", "Rahul", "Priya", "Ankit", "Karan", "Neha", "Vikas",
-  "Manoj", "Deepak", "Pooja", "Rohit", "Sanjay", "Arjun", "Kiran", "Nitin", "Ashok",
-  "Meera", "Tarun", "Harsh", "Jayesh", "Lakshmi", "Omkar", "Yashwant",
-];
-const LAST = [
-  "Kumar", "Sharma", "Patel", "Verma", "Gupta", "Reddy", "Nair", "Singh", "Iyer",
-  "Joshi", "Mehta", "Desai",
-];
 /** Mock traders (by identity index) who have NOT ticked the public-consent box. */
 const NON_CONSENTING = new Set([8, 19, 33]);
+
 const CITIES: [string, string][] = [
-  ["Mumbai", "IN"], ["Delhi", "IN"], ["Bengaluru", "IN"], ["Hyderabad", "IN"],
-  ["Chennai", "IN"], ["Pune", "IN"], ["Kolkata", "IN"], ["Ahmedabad", "IN"],
-  ["Jaipur", "IN"], ["Surat", "IN"], ["Lucknow", "IN"], ["Indore", "IN"],
-  ["Kochi", "IN"], ["Chandigarh", "IN"], ["Nagpur", "IN"], ["Dubai", "AE"],
-  ["Singapore", "SG"],
+  ["New York", "US"], ["London", "GB"], ["Dubai", "AE"], ["Singapore", "SG"],
+  ["Lagos", "NG"], ["Mumbai", "IN"], ["São Paulo", "BR"], ["Cape Town", "ZA"],
+  ["Berlin", "DE"], ["Manila", "PH"], ["Kuala Lumpur", "MY"], ["Nairobi", "KE"],
+  ["Sydney", "AU"], ["Toronto", "CA"], ["Paris", "FR"], ["Tokyo", "JP"],
+  ["Istanbul", "TR"], ["Bangkok", "TH"],
+];
+
+const FIRST_NAMES = [
+  "James", "Maria", "Mohammed", "Priya", "Alex", "Sofia", "David", "Aisha",
+  "Carlos", "Emma", "Omar", "Mei", "Ivan", "Fatima", "Jake", "Amara",
+  "Daniel", "Yuki", "Patrick", "Zara", "Luca", "Nia", "Stefan", "Aarav",
+  "Ryan",
+];
+const LAST_NAMES = [
+  "Thornton", "Silva", "Al-Rashid", "Nair", "Morgan", "Reyes", "Koch", "Bakr",
+  "Müller", "Wong", "Patel", "Osei", "Chen", "Hassan", "Williams", "Kimura",
+  "Santos", "Ahmed", "Park", "Okafor",
 ];
 
 interface Identity {
@@ -255,8 +260,9 @@ interface Identity {
   avatarUrl: string | null;
   city: string;
   countryCode: string;
-  segment: Segment;
+  topInstrument: string;
 }
+
 const IDENTITIES: Identity[] = (() => {
   const rnd = mulberry32(7);
   const seen = new Set<string>();
@@ -264,26 +270,24 @@ const IDENTITIES: Identity[] = (() => {
     let step = 0;
     let full = "";
     do {
-      full = `${FIRST[i % FIRST.length]} ${LAST[(i * 5 + Math.floor(i / 25) + step) % LAST.length]}`;
+      full = `${FIRST_NAMES[i % FIRST_NAMES.length]} ${LAST_NAMES[(i * 5 + Math.floor(i / 25) + step) % LAST_NAMES.length]}`;
       step++;
     } while (seen.has(full));
     seen.add(full);
-    // mostly India, a handful abroad
-    const abroad = i === 11 || i === 29 || i === 41;
-    const pick = abroad
-      ? CITIES[15 + (i % 2)]
-      : CITIES[Math.floor(rnd() * 15)];
+    const pick = CITIES[Math.floor(rnd() * CITIES.length)];
+    const instrument = INSTRUMENTS[Math.floor(rnd() * INSTRUMENTS.length)];
     return {
       userId: `u_mock_${i}`,
       name: NON_CONSENTING.has(i) ? ANON_NAME : full,
       avatarUrl: null,
       city: pick[0],
       countryCode: pick[1],
-      segment: SEGMENTS[Math.floor(rnd() * 4)],
+      topInstrument: instrument,
     };
   });
 })();
-const YOU_INDEX = 26; // overall rank #27 is where the signed-in user lands in the mock
+
+const YOU_INDEX = 26;
 const YOU_ID = `u_mock_${YOU_INDEX}`;
 
 /** Values descending from `top` to `bottom` over `n` entries, rounded to `step`. */
@@ -307,16 +311,18 @@ function strictDesc(v: number[]): number[] {
   return out;
 }
 
-const OVERALL_VALUES: number[] = (() => {
-  const anchors = [14760, 13000, 9080, 8380, 7700, 7300, 6440, 5040].map(usd);
-  const rest = curve(42, usd(4800), usd(1800), 1, 31);
-  return strictDesc([...anchors, ...rest]);
-})();
+// Top ~$18,400 descending to ~$300, strictly descending, 50 entries
+const OVERALL_VALUES: number[] = strictDesc([
+  18400, 17200, 15800, 14500, 13200, 12100, 11000, 10100, 9400, 8700,
+  8100, 7500, 6950, 6400, 5900, 5400, 4950, 4550, 4200, 3900,
+  3650, 3420, 3200, 3000, 2820, 2650, 2500, 2350, 2210, 2080,
+  1960, 1840, 1730, 1620, 1520, 1430, 1340, 1260, 1180, 1110,
+  1040,  980,  920,  860,  800,  740,  680,  600,  450,  300,
+]);
 
 function buildBoard(period: Period): LeaderboardEntry[] {
   const seed = period === "overall" ? 101 : period === "week" ? 202 : 303;
   const rnd = mulberry32(seed);
-  // ordering: overall = identity order; others = identity order + noise
   const order = IDENTITIES.map((_, i) => i);
   if (period !== "overall") {
     const spread = period === "week" ? 14 : 26;
@@ -327,33 +333,41 @@ function buildBoard(period: Period): LeaderboardEntry[] {
     period === "overall"
       ? OVERALL_VALUES
       : period === "week"
-        ? strictDesc(curve(50, 110, 28, 1, 41))
-        : strictDesc(curve(50, 80, 26, 1, 51));
-  const scale = period === "overall" ? 1 : period === "week" ? 0.14 : 0.03;
+        ? strictDesc(curve(50, 3200, 80, 1, 41))
+        : strictDesc(curve(50, 800, 25, 1, 51));
 
   return order.map((idIdx, k) => {
     const id = IDENTITIES[idIdx];
     const rank = k + 1;
-    const saved = values[k];
-    const paid = Math.round(saved * (1.15 + rnd() * 0.9));
-    const trades = Math.max(3, Math.round((saved / (7 + rnd() * 5)) * (period === "overall" ? 1 : 1)));
-    const turnover = Math.round(trades * (9000 + rnd() * 7000) * (scale > 0 ? 1 : 1));
+    const netProfit = values[k];
+    const trades = Math.max(10, Math.round(20 + rnd() * 580));
+    const volumeLots = Math.round(20 + rnd() * 580);
+    const returnPct = Math.round((40 + rnd() * 100) * 10) / 10;
+    const winRatePct = Math.round((48 + rnd() * 24) * 10) / 10;
+    const maxDrawdownPct = Math.round((3 + rnd() * 22) * 10) / 10;
+
     // movement
     const isNew = rnd() < 0.1;
-    const delta = Math.round((rnd() - 0.5) * 8); // -4..+4
+    const delta = Math.round((rnd() - 0.5) * 8);
     const prev = isNew ? null : Math.max(1, rank + delta);
     const movement = prev === null ? 0 : prev - rank;
-    // trend — cumulative, monotone, ends exactly at `saved`
+
+    // trend — 14 points cumulative, NOT forced monotone (can dip)
     const trend: number[] = [];
-    const p = 0.85 + rnd() * 0.7;
+    const rndT = mulberry32(seed + idIdx * 17 + 1);
+    let running = 0;
     for (let t = 0; t < 14; t++) {
-      const f = Math.pow((t + 1) / 14, p) * (0.96 + rnd() * 0.08);
-      let v = Math.round(saved * Math.min(f, 1));
-      if (t > 0) v = Math.max(v, trend[t - 1]);
-      trend.push(v);
+      const daily = Math.round(
+        (netProfit / 14) * (0.5 + rndT() * 1.2) - (rndT() < 0.25 ? rndT() * (netProfit / 20) : 0),
+      );
+      running += daily;
+      trend.push(running);
     }
-    trend[13] = saved;
+    // pin last point to netProfit
+    trend[13] = netProfit;
+
     const tier: PrizeTierId | null = rank === 1 ? "grand" : rank <= 3 ? "podium" : rank <= 20 ? "laptop" : null;
+
     return {
       rank,
       previousRank: prev,
@@ -363,11 +377,13 @@ function buildBoard(period: Period): LeaderboardEntry[] {
       avatarUrl: id.avatarUrl,
       countryCode: id.countryCode,
       city: id.city,
-      brokerageSaved: saved,
-      brokeragePaid: paid,
+      netProfit,
+      returnPct,
+      winRatePct,
+      maxDrawdownPct,
       tradesCount: trades,
-      turnover,
-      topSegment: id.segment,
+      volumeLots,
+      topInstrument: id.topInstrument,
       lastActiveAt: isoAt(Math.round(rnd() * 6 * 3600)),
       trend,
       prizeTierId: tier,
@@ -376,69 +392,64 @@ function buildBoard(period: Period): LeaderboardEntry[] {
   });
 }
 
-const USED = usd(298913);
-const POOL_SIZE = usd(10000000);
-const BENEFITED = 411;
+const MOCK_CONTEST_STATS: ContestStats = {
+  prizeFund: 50000, // PLACEHOLDER – replace with final prize value
+  tradersEnrolled: 4100,
+  activeTraders: 2900,
+  totalTrades: 62000,
+  totalVolumeLots: 118000,
+  avgReturnPct: 23.4,
+  bestTradeProfit: 4200,
+};
 
-const HISTORY: PoolHistoryPoint[] = (() => {
+const EQUITY_HISTORY: EquityPoint[] = (() => {
   const rnd = mulberry32(88);
-  const pts: PoolHistoryPoint[] = [];
-  let prev = 0;
+  const pts: EquityPoint[] = [];
+  let totalProfit = 0;
   for (let i = 0; i < 14; i++) {
-    const t = (i + 1) / 14;
-    let v = Math.round(USED * Math.pow(t, 1.35) * (0.985 + rnd() * 0.03));
-    v = Math.max(v, prev + 1);
-    prev = v;
+    // Not forced monotone - can dip slightly
+    const daily = Math.round(6000 + rnd() * 4000 - (rnd() < 0.25 ? rnd() * 1500 : 0));
+    totalProfit += daily;
     const d = new Date(Date.UTC(2026, 9, 24 - (13 - i)));
-    pts.push({ date: d.toISOString().slice(0, 10), used: v });
+    pts.push({ date: d.toISOString().slice(0, 10), totalProfit });
   }
-  pts[13].used = USED;
   return pts;
 })();
 
-const SEGMENT_SHARES: [Segment, number][] = [
-  ["Equity Intraday", 38],
-  ["Futures & Options", 41],
-  ["Commodity", 14],
-  ["Currency", 7],
+const INSTRUMENT_SHARES: [InstrumentClass, number][] = [
+  ["Majors", 42],
+  ["Metals", 21],
+  ["Indices", 18],
+  ["Minors", 12],
+  ["Crypto", 5],
+  ["Exotics", 2],
 ];
 
 /* ── 1.3 MOCK_DB ────────────────────────────────────────────────────────── */
 export const MOCK_DB = {
   competition: {
-    id: "cmp_pride_pool_2026",
-    slug: "pride-pool",
-    title: "$120K Pride Pool",
+    id: "cmp_fogm_championship_2026",
+    slug: "fogm-championship-2026",
+    title: "FOGM Trading Championship",
     subtitle:
-      "Trade as you normally do. We refund your brokerage from a $120K pool, and the traders who save the most win laptops and VIP access.",
+      "Trade forex, gold and indices on live accounts. The best performers climb the board and win.",
     status: "active",
     currency: { code: "USD", locale: "en-US" },
     registrationClosesAt: "2026-12-15T18:29:59.000Z",
     startsAt: "2026-10-01T03:30:00.000Z",
     endsAt: "2026-12-31T18:29:59.000Z",
     winnersDeclaredAt: null,
-    metricLabel: "Brokerage Saved",
+    metricLabel: "Net Profit",
     metricHelp:
-      "The brokerage refunded to you from the pool on your trades. Higher saved = higher rank.",
+      "Your realised profit in USD across all closed trades during the contest. Higher profit = higher rank.",
     partners: [
-      { name: "Lemonn", role: "Trading platform" },
-      { name: "Booming Bulls Academy", role: "Education partner" },
+      { name: "Prime Markets Ltd", role: "Trading platform" },
+      { name: "TradeEdu Pro", role: "Education partner" },
     ],
     updatedAt: isoAt(40),
   } as Competition,
 
-  pool: {
-    poolSize: POOL_SIZE,
-    used: USED,
-    remaining: POOL_SIZE - USED,
-    usedPct: Math.round((USED / POOL_SIZE) * 10000) / 100,
-    tradersEnrolled: 4103,
-    tradersBenefited: BENEFITED,
-    totalTrades: 38240,
-    totalTurnover: usd(421500000),
-    avgSavedPerBeneficiary: Math.round(USED / BENEFITED),
-    largestSingleSaving: usd(1850),
-  } as PoolStats,
+  contestStats: MOCK_CONTEST_STATS,
 
   leaderboard: {
     overall: buildBoard("overall"),
@@ -446,15 +457,14 @@ export const MOCK_DB = {
     today: buildBoard("today"),
   } as Record<Period, LeaderboardEntry[]>,
 
-  // NOTE: reward values below are PLACEHOLDERS — replace with the final prize copy.
   prizeTiers: [
     {
       id: "grand",
-      label: "Grand prize",
+      label: "Grand Prize",
       ranksFrom: 1,
       ranksTo: 1,
-      reward: "Premium laptop + VIP Access",
-      perks: ["Premium laptop", "VIP access to partner events", "Featured on the winners wall"],
+      reward: "$15,000 cash",
+      perks: ["$15,000 cash prize", "Championship trophy", "Featured on winners wall"],
       winnersCount: 1,
     },
     {
@@ -462,128 +472,130 @@ export const MOCK_DB = {
       label: "Podium",
       ranksFrom: 2,
       ranksTo: 3,
-      reward: "Premium laptop + VIP Access",
-      perks: ["Premium laptop", "VIP access to partner events"],
+      reward: "$5,000 cash",
+      perks: ["$5,000 cash prize", "Certificate of excellence"],
       winnersCount: 2,
     },
     {
       id: "laptop",
-      label: "Laptop",
+      label: "Top 20",
       ranksFrom: 4,
       ranksTo: 20,
-      reward: "Laptop",
-      perks: ["A brand-new laptop", "Certificate of achievement"],
+      reward: "$1,000 cash",
+      perks: ["$1,000 cash prize", "Digital certificate"],
       winnersCount: 17,
     },
   ] as PrizeTier[],
 
   pastEditions: [
     {
-      id: "ed_launch_2026",
-      title: "$60K Launch Pool",
-      period: "Apr – Jun 2026",
-      poolSize: usd(5000000),
-      tradersEnrolled: 2284,
+      id: "ed_q1_2026",
+      title: "FOGM Q1 Championship 2026",
+      period: "Jan – Mar 2026",
+      prizeFund: 30000,
+      tradersEnrolled: 2840,
       podium: [
-        { rank: 1, name: "Rakesh Malhotra", brokerageSaved: usd(11840) },
-        { rank: 2, name: "Manish Kapoor", brokerageSaved: usd(10215) },
-        { rank: 3, name: "Pranav Agarwal", brokerageSaved: usd(8760) },
+        { rank: 1, name: "James Thornton", netProfit: 16240 },
+        { rank: 2, name: "Amara Osei", netProfit: 13870 },
+        { rank: 3, name: "Sofia Reyes", netProfit: 11540 },
       ],
     },
     {
-      id: "ed_monsoon_2026",
-      title: "$90K Monsoon Pool",
-      period: "Jul – Sep 2026",
-      poolSize: usd(7500000),
-      tradersEnrolled: 3310,
+      id: "ed_q2_2026",
+      title: "FOGM Q2 Championship 2026",
+      period: "Apr – Jun 2026",
+      prizeFund: 40000,
+      tradersEnrolled: 3620,
       podium: [
-        { rank: 1, name: "Vikram Chawla", brokerageSaved: usd(15320) },
-        { rank: 2, name: "Anjali Bhatia", brokerageSaved: usd(12970) },
-        { rank: 3, name: "Sandeep Rao", brokerageSaved: usd(10480) },
+        { rank: 1, name: "Mohammed Al-Rashid", netProfit: 17980 },
+        { rank: 2, name: "Priya Nair", netProfit: 14210 },
+        { rank: 3, name: "Daniel Koch", netProfit: 12090 },
       ],
     },
   ] as PastEdition[],
 
   activity: [
-    { id: "a1", name: "Suresh Kumar", avatarUrl: null, amount: usd(420), segment: "Futures & Options", at: isoAt(120), kind: "saving" },
-    { id: "a2", name: "Neha Pillai", avatarUrl: null, amount: usd(0), segment: "Equity Intraday", at: isoAt(240), kind: "joined" },
-    { id: "a3", name: "Bhavna Joshi", avatarUrl: null, amount: usd(310), segment: "Commodity", at: isoAt(420), kind: "saving" },
-    { id: "a4", name: "Rohit Sharma", avatarUrl: null, amount: usd(0), segment: "Equity Intraday", at: isoAt(600), kind: "rank_up" },
-    { id: "a5", name: "Kabir Shah", avatarUrl: null, amount: usd(185), segment: "Currency", at: isoAt(900), kind: "saving" },
-    { id: "a6", name: "Deepak Sethi", avatarUrl: null, amount: usd(0), segment: "Futures & Options", at: isoAt(1260), kind: "joined" },
-    { id: "a7", name: "Sharad Kumar", avatarUrl: null, amount: usd(640), segment: "Futures & Options", at: isoAt(1680), kind: "saving" },
-    { id: "a8", name: "Pooja Gupta", avatarUrl: null, amount: usd(0), segment: "Commodity", at: isoAt(2100), kind: "rank_up" },
-    { id: "a9", name: "Arjun Nair", avatarUrl: null, amount: usd(275), segment: "Equity Intraday", at: isoAt(2700), kind: "saving" },
-    { id: "a10", name: "Manish Kapoor", avatarUrl: null, amount: usd(0), segment: "Currency", at: isoAt(3300), kind: "joined" },
-    { id: "a11", name: "Tarun Iyer", avatarUrl: null, amount: usd(520), segment: "Futures & Options", at: isoAt(4200), kind: "saving" },
-    { id: "a12", name: "Harsh Desai", avatarUrl: null, amount: usd(0), segment: "Equity Intraday", at: isoAt(5400), kind: "rank_up" },
+    { id: "a1", name: "Alex M.", avatarUrl: null, amount: 320, instrument: "EURUSD", at: isoAt(120), kind: "trade_win" },
+    { id: "a2", name: "Priya N.", avatarUrl: null, amount: 0, instrument: "XAUUSD", at: isoAt(240), kind: "joined" },
+    { id: "a3", name: "James T.", avatarUrl: null, amount: 485, instrument: "US30", at: isoAt(420), kind: "trade_win" },
+    { id: "a4", name: "David K.", avatarUrl: null, amount: 0, instrument: "GBPUSD", at: isoAt(600), kind: "rank_up" },
+    { id: "a5", name: "Aisha B.", avatarUrl: null, amount: 210, instrument: "NAS100", at: isoAt(900), kind: "trade_win" },
+    { id: "a6", name: "Carlos R.", avatarUrl: null, amount: 0, instrument: "USDJPY", at: isoAt(1260), kind: "joined" },
+    { id: "a7", name: "Emma W.", avatarUrl: null, amount: 640, instrument: "EURUSD", at: isoAt(1680), kind: "trade_win" },
+    { id: "a8", name: "Omar S.", avatarUrl: null, amount: 0, instrument: "BTCUSD", at: isoAt(2100), kind: "rank_up" },
+    { id: "a9", name: "Mei L.", avatarUrl: null, amount: 275, instrument: "AUDUSD", at: isoAt(2700), kind: "trade_win" },
+    { id: "a10", name: "Ivan P.", avatarUrl: null, amount: 0, instrument: "XAUUSD", at: isoAt(3300), kind: "joined" },
+    { id: "a11", name: "Fatima A.", avatarUrl: null, amount: 520, instrument: "GBPUSD", at: isoAt(4200), kind: "trade_win" },
+    { id: "a12", name: "Jake M.", avatarUrl: null, amount: 0, instrument: "US30", at: isoAt(5400), kind: "rank_up" },
   ] as ActivityItem[],
 
-  poolHistory: HISTORY,
+  equityHistory: EQUITY_HISTORY,
 
-  segmentBreakdown: (() => {
+  instrumentBreakdown: (() => {
     let allocated = 0;
-    return SEGMENT_SHARES.map(([segment, sharePct], i) => {
-      const saved =
-        i === SEGMENT_SHARES.length - 1 ? USED - allocated : Math.round((USED * sharePct) / 100);
-      allocated += saved;
-      return { segment, saved, sharePct };
+    return INSTRUMENT_SHARES.map(([instrumentClass, sharePct], i) => {
+      const volumeLots =
+        i === INSTRUMENT_SHARES.length - 1
+          ? MOCK_CONTEST_STATS.totalVolumeLots - allocated
+          : Math.round((MOCK_CONTEST_STATS.totalVolumeLots * sharePct) / 100);
+      allocated += volumeLots;
+      return { instrumentClass, volumeLots, sharePct };
     });
-  })() as SegmentBreakdown[],
+  })() as InstrumentBreakdown[],
 
   content: {
     steps: [
       {
         title: "Sign up",
-        body: "Open a trading account on our partner platform in minutes, or just log in. Existing customers are already enrolled, so there is nothing extra to fill in.",
+        body: "Enter your email on any page. Verify with a 6-digit code. No password needed.",
       },
       {
-        title: "Trade as usual",
-        body: "Trade in any eligible segment exactly the way you always do. Every dollar of brokerage you pay is tracked and refunded from the pool until it runs out.",
+        title: "Trade forex as usual",
+        body: "Open trades on your live account as you normally would. Every closed trade counts toward your net profit score automatically.",
       },
       {
         title: "Climb the board",
-        body: "The more brokerage you save, the higher you rank. The top 20 at the end of the contest win a laptop, and the top 3 get VIP access as well.",
+        body: "Your net profit updates as trades close. The top performers at the end win cash prizes. Top 20 are in the winning zone.",
       },
     ],
     rules: [
-      "Open to resident individuals aged 18+ with an active, KYC-complete account on the partner trading platform.",
-      "You need at least 10 executed trades during the contest period to appear on the ranked board.",
-      "Eligible segments: Equity Intraday, Futures & Options, Commodity and Currency.",
-      "Brokerage refunds are capped at $300 per trader for the whole contest.",
-      "Fair-use applies. Wash, circular and self-matched trades are excluded, and abusive accounts are disqualified.",
-      "Ties are broken by the earlier timestamp at which the tied amount was reached.",
+      "Open to individuals with an active live trading account. Demo accounts are not eligible.",
+      "Minimum 10 closed trades during the contest period to appear on the ranked board.",
+      "Eligible instruments: Forex pairs (Majors, Minors, Exotics), Metals (XAUUSD, XAGUSD), Indices (US30, NAS100, UK100) and Crypto (BTCUSD, ETHUSD).",
+      "Maximum account drawdown must not exceed 30% at any point during the contest.",
+      "Latency arbitrage, linked-account hedging and martingale abuse are prohibited and lead to disqualification.",
+      "Ties are broken by the earlier timestamp at which the tied net profit was reached.",
       "Winners are verified for eligibility and fair-use before they are declared.",
-      "If the pool is exhausted the contest ends early: refunds stop and the standings are frozen.",
+      "One entry per person. Multiple accounts entered for the same person will all be disqualified.",
     ],
     faqs: [
       {
-        q: "What is “Brokerage Saved”?",
-        a: "It is the brokerage refunded to you from the pool on your trades. It is the single number we rank on: the higher your brokerage saved, the higher your rank.",
+        q: "What is Net Profit?",
+        a: "Net Profit is your total realised profit in USD across all closed trades during the contest period. It is the single metric we rank on: higher net profit = higher rank.",
+      },
+      {
+        q: "Do trading losses count against me?",
+        a: "Yes. Net Profit accounts for all closed trades — gains and losses. A losing week will reduce your score, but you can recover with future wins.",
+      },
+      {
+        q: "Can I use a demo account?",
+        a: "No. Only live accounts with real capital are eligible. Demo trades are not counted.",
       },
       {
         q: "When are winners declared?",
-        a: "After the contest ends and every top-20 account has been verified. Until then, the board shows provisional current leaders, not winners.",
+        a: "Within 7 days of the contest end date, after every top-20 account has been verified for eligibility and fair-use compliance.",
       },
       {
         q: "How are ties broken?",
-        a: "If two traders have saved the same amount, the one who reached that amount first (earlier timestamp) ranks higher.",
+        a: "If two traders have identical net profit, the one who reached that amount first (earlier timestamp on the qualifying trade) ranks higher.",
       },
       {
-        q: "Does a trading loss affect my rank?",
-        a: "No. Rank depends only on the brokerage refunded to you, not on your profit or loss. Trading still carries risk, so trade responsibly.",
-      },
-      {
-        q: "When do I get the prize?",
-        a: "Prizes are dispatched after winners are declared and verified. We will contact winners on their registered email and phone.",
-      },
-      {
-        q: "I am an existing customer. Do I need to register?",
-        a: "No. Existing customers on the partner platform are enrolled automatically and start saving from their next eligible trade.",
+        q: "When are prizes paid?",
+        a: "Cash prizes are transferred within 14 days of the winners being declared. Winners will be contacted on their registered email.",
       },
     ],
     disclosure:
-      "Trading in securities involves risk of loss. Past performance is not indicative of future results. Brokerage reimbursement is a promotional benefit funded from the contest pool and is subject to the contest terms, eligibility and fair-use checks. Nothing on this page is investment advice. Names and photos are shown only for traders who opted in to the public leaderboard; everyone else appears as \"Anonymous trader\".",
+      "Trading forex and CFDs carries a high risk of loss and may not suit everyone. Past performance is not a guide to future results. Prizes are subject to the contest terms, eligibility and fair-use checks. Nothing here is investment advice.",
   } as ContentPayload,
 };
 
@@ -593,7 +605,8 @@ export interface MeUser {
   email: string;
   name: string;
   avatarUrl: string | null;
-  publicConsent: boolean;
+  showName: boolean;
+  showPhoto: boolean;
   country: string | null;
   profileComplete: boolean;
 }
@@ -607,18 +620,19 @@ export interface SessionUser {
   userId: string;
   name: string;
   avatarUrl: string | null;
-  publicConsent: boolean;
+  showName: boolean;
+  showPhoto: boolean;
   country?: string;
 }
 
 /** What the public may see: real name + photo only with consent. */
-export function publicIdentity(u: Pick<SessionUser, "name" | "avatarUrl" | "publicConsent">): {
+export function publicIdentity(u: Pick<SessionUser, "name" | "avatarUrl" | "showName" | "showPhoto">): {
   name: string;
   avatarUrl: string | null;
 } {
-  return u.publicConsent
-    ? { name: u.name, avatarUrl: u.avatarUrl }
-    : { name: ANON_NAME, avatarUrl: null };
+  const name = u.showName ? u.name : ANON_NAME;
+  const avatarUrl = u.showPhoto && u.showName ? u.avatarUrl : null;
+  return { name, avatarUrl };
 }
 
 let mockUser: SessionUser | null = null;
@@ -671,9 +685,9 @@ export function getCompetition(): Promise<Competition> {
   return http<Competition>("/competition");
 }
 
-export function getPoolStats(): Promise<PoolStats> {
-  if (USE_MOCK) return mock(() => MOCK_DB.pool);
-  return http<PoolStats>("/pool");
+export function getContestStats(): Promise<ContestStats> {
+  if (USE_MOCK) return mock(() => MOCK_DB.contestStats);
+  return http<ContestStats>("/contest/stats");
 }
 
 export function getLeaderboard(p: {
@@ -702,7 +716,7 @@ export function getLeaderboard(p: {
         pageSize,
         entries: filtered.slice((page - 1) * pageSize, page * pageSize).map(rebase),
         cutoffRank: 20,
-        cutoffSaved: all[19].brokerageSaved,
+        cutoffValue: all[19].netProfit,
         updatedAt: new Date(Date.now() - 40_000).toISOString(),
         you: you ? rebase(you) : null,
       };
@@ -732,7 +746,7 @@ export function getWinners(): Promise<WinnersPayload> {
           name: e.name,
           avatarUrl: e.avatarUrl,
           countryCode: e.countryCode,
-          brokerageSaved: e.brokerageSaved,
+          netProfit: e.netProfit,
           prize: prizeOf(e.rank),
         })),
         champion: top[0] ?? null,
@@ -755,14 +769,14 @@ export function getActivity(): Promise<ActivityItem[]> {
   return http<ActivityItem[]>("/activity");
 }
 
-export function getPoolHistory(): Promise<PoolHistoryPoint[]> {
-  if (USE_MOCK) return mock(() => MOCK_DB.poolHistory);
-  return http<PoolHistoryPoint[]>("/pool/history");
+export function getProfitHistory(): Promise<EquityPoint[]> {
+  if (USE_MOCK) return mock(() => MOCK_DB.equityHistory);
+  return http<EquityPoint[]>("/contest/profit-history");
 }
 
-export function getSegmentBreakdown(): Promise<SegmentBreakdown[]> {
-  if (USE_MOCK) return mock(() => MOCK_DB.segmentBreakdown);
-  return http<SegmentBreakdown[]>("/segments");
+export function getInstrumentBreakdown(): Promise<InstrumentBreakdown[]> {
+  if (USE_MOCK) return mock(() => MOCK_DB.instrumentBreakdown);
+  return http<InstrumentBreakdown[]>("/contest/instruments");
 }
 
 export function getPastEditions(): Promise<PastEdition[]> {
@@ -777,32 +791,22 @@ export function getContent(): Promise<ContentPayload> {
 
 /* ── Dev-only data consistency checks ───────────────────────────────────── */
 if (process.env.NODE_ENV !== "production") {
-  const { pool, leaderboard } = MOCK_DB;
-  console.assert(pool.remaining === pool.poolSize - pool.used, "[api] remaining must equal poolSize - used");
-  console.assert(
-    pool.avgSavedPerBeneficiary === Math.round(pool.used / pool.tradersBenefited),
-    "[api] avgSavedPerBeneficiary mismatch",
-  );
+  const { contestStats, leaderboard, instrumentBreakdown, equityHistory } = MOCK_DB;
   (Object.keys(leaderboard) as Period[]).forEach((period) => {
     const rows = leaderboard[period];
     rows.forEach((e, i) => {
       console.assert(e.rank === i + 1, `[api] ${period}: ranks must be sequential (#${i + 1})`);
       console.assert(
-        i === 0 || rows[i - 1].brokerageSaved > e.brokerageSaved,
+        i === 0 || rows[i - 1].netProfit > e.netProfit,
         `[api] ${period}: leaderboard must be strictly descending at #${e.rank}`,
       );
       console.assert(e.inWinningZone === e.rank <= 20, `[api] ${period}: winning zone flag wrong at #${e.rank}`);
       console.assert(e.trend.length === 14, `[api] ${period}: trend must have 14 points (#${e.rank})`);
       console.assert(
-        e.trend[e.trend.length - 1] === e.brokerageSaved,
-        `[api] ${period}: trend last value must equal brokerageSaved (#${e.rank})`,
+        e.trend[e.trend.length - 1] === e.netProfit,
+        `[api] ${period}: trend last value must equal netProfit (#${e.rank})`,
       );
-      console.assert(e.brokeragePaid > e.brokerageSaved, `[api] ${period}: brokeragePaid must exceed saved (#${e.rank})`);
     });
-    console.assert(
-      rows.reduce((s, e) => s + e.brokerageSaved, 0) < pool.used,
-      `[api] ${period}: listed total must be less than pool.used`,
-    );
   });
   console.assert(
     new Set(leaderboard.overall.filter((e) => e.name !== ANON_NAME).map((e) => e.name)).size ===
@@ -814,11 +818,15 @@ if (process.env.NODE_ENV !== "production") {
     "[api] non-consenting traders must have no avatar",
   );
   console.assert(
-    MOCK_DB.segmentBreakdown.reduce((s, x) => s + x.sharePct, 0) === 100,
-    "[api] segment shares must sum to 100",
+    instrumentBreakdown.reduce((s, x) => s + x.sharePct, 0) === 100,
+    "[api] instrument shares must sum to 100",
   );
   console.assert(
-    MOCK_DB.poolHistory[MOCK_DB.poolHistory.length - 1].used === pool.used,
-    "[api] last poolHistory point must equal pool.used",
+    contestStats.prizeFund > 0,
+    "[api] prizeFund must be positive",
+  );
+  console.assert(
+    equityHistory.length === 14,
+    "[api] equityHistory must have 14 points",
   );
 }

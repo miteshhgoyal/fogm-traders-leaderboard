@@ -4,23 +4,31 @@ export interface IUser {
   email: string;
   name: string;
   avatarUrl: string | null;
-  /** Name and photo are public only when this is true. */
-  publicConsent: boolean;
+  showName: boolean;
+  showPhoto: boolean;
   country: string | null;
   profileComplete: boolean;
+  status: "active" | "disabled";
+  lastLoginAt: Date | null;
+  loginCount: number;
+  sessionVersion: number;
   createdAt: Date;
   updatedAt: Date;
 }
 
 const schema = new Schema<IUser>(
   {
-    // `unique` creates the index
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     name: { type: String, default: "", trim: true, maxlength: 30 },
     avatarUrl: { type: String, default: null },
-    publicConsent: { type: Boolean, default: false },
+    showName: { type: Boolean, default: true },
+    showPhoto: { type: Boolean, default: true },
     country: { type: String, default: null },
     profileComplete: { type: Boolean, default: false },
+    status: { type: String, enum: ["active", "disabled"], default: "active" },
+    lastLoginAt: { type: Date, default: null },
+    loginCount: { type: Number, default: 0 },
+    sessionVersion: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

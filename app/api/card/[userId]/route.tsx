@@ -7,7 +7,6 @@ import { tierFor } from "@/lib/card-theme";
 import { CARD_SIZE, CardView, type CardData, type CardFormat } from "@/lib/card-view";
 import { resolveEntry } from "@/lib/rank";
 
-
 const CACHE = "public, s-maxage=300, stale-while-revalidate=600";
 
 async function font(file: string): Promise<ArrayBuffer> {
@@ -36,9 +35,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ userId: string 
   const entry = await resolveEntry(userId);
   if (!entry) return new Response("Not found", { status: 404 });
 
-  const comp = MOCK_DB.competition; // real mode: the contest service supplies title + currency (see lib/api.ts)
+  const comp = MOCK_DB.competition;
   const cur = { code: comp.currency.code, locale: comp.currency.locale };
-  const total = MOCK_DB.pool.tradersEnrolled;
+  const total = MOCK_DB.contestStats.tradersEnrolled;
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const data: CardData = {
     rank: entry.rank,
@@ -49,9 +48,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ userId: string 
     initials: initialsOf(entry.name),
     countryCode: entry.countryCode,
     city: entry.city,
-    savedText: formatMoney(entry.brokerageSaved, cur),
+    savedText: formatMoney(entry.netProfit, cur),
     tradesText: formatNumber(entry.tradesCount, cur.locale),
-    topSegment: entry.topSegment,
+    topSegment: entry.topInstrument,
     trend: entry.trend,
     tier: tierFor(entry.rank),
     anonymous: entry.avatarUrl === null && entry.name === "Anonymous trader",

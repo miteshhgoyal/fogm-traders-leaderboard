@@ -5,9 +5,8 @@ import { User, type IUser } from "./models/User";
 const OBJECT_ID = /^[a-f0-9]{24}$/i;
 export const isObjectId = (s: string): boolean => OBJECT_ID.test(s);
 
-
-export function toSessionUser(id: string, u: Pick<IUser, "name" | "avatarUrl" | "publicConsent" | "country">): SessionUser {
-  return { userId: id, name: u.name, avatarUrl: u.avatarUrl, publicConsent: u.publicConsent, country: u.country ?? undefined };
+export function toSessionUser(id: string, u: Pick<IUser, "name" | "avatarUrl" | "showName" | "showPhoto" | "country">): SessionUser {
+  return { userId: id, name: u.name, avatarUrl: u.avatarUrl, showName: u.showName, showPhoto: u.showPhoto, country: u.country ?? undefined };
 }
 
 /**
@@ -31,5 +30,7 @@ export async function resolveEntry(userId: string): Promise<LeaderboardEntry | n
   await dbConnect();
   const doc = await User.findById(userId).lean();
   if (!doc) return null;
+  // Disabled users cannot have their share page viewed publicly
+  if (doc.status === "disabled") return null;
   return getRankEntry(userId, toSessionUser(userId, doc));
 }

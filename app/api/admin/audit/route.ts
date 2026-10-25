@@ -20,7 +20,7 @@ export async function GET(req: Request): Promise<Response> {
   const pageSize = Math.min(100, Math.max(10, parseInt(url.searchParams.get("pageSize") ?? "25")));
   
   const filter: Record<string, unknown> = {};
-  if (action) filter.action = action;
+  if (action && action !== "all") filter.action = action;
   if (from || to) {
     filter.createdAt = {};
     if (from) (filter.createdAt as Record<string, unknown>).$gte = new Date(from);

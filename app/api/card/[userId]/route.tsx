@@ -6,6 +6,7 @@ import { avatarPngSrc } from "@/lib/avatar-url";
 import { tierFor } from "@/lib/card-theme";
 import { CARD_SIZE, CardView, type CardData, type CardFormat } from "@/lib/card-view";
 import { resolveEntry } from "@/lib/rank";
+import { getSettings } from "@/lib/settings";
 
 const CACHE = "public, s-maxage=300, stale-while-revalidate=600";
 
@@ -35,8 +36,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ userId: string 
   const entry = await resolveEntry(userId);
   if (!entry) return new Response("Not found", { status: 404 });
 
-  const comp = MOCK_DB.competition;
-  const cur = { code: comp.currency.code, locale: comp.currency.locale };
+  let settings;
+  try {
+    settings = await getSettings();
+  } catch {
+    settings = null;
+  }
+  const contest = settings?.contest ?? MOCK_DB.competition;
+  const cur = { code: contest.currency?.code ?? "USD", locale: contest.currency?.locale ?? "en-US" };
   const total = MOCK_DB.contestStats.tradersEnrolled;
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const data: CardData = {
@@ -54,7 +61,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ userId: string 
     trend: entry.trend,
     tier: tierFor(entry.rank),
     anonymous: entry.avatarUrl === null && entry.name === "Anonymous trader",
-    contestTitle: comp.title,
+    contestTitle: contest.title,
     siteHost: site ? new URL(site).host : "fogm",
     totalText: formatNumber(total, cur.locale),
   };

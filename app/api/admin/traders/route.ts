@@ -21,7 +21,10 @@ export async function GET(req: Request): Promise<Response> {
   const search = url.searchParams.get("search") ?? "";
   
   const filter: Record<string, unknown> = { period };
-  if (search) filter.name = { $regex: search, $options: "i" };
+  if (search.trim()) {
+    const safeRegex = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    filter.name = { $regex: safeRegex, $options: "i" };
+  }
   
   const [total, traders] = await Promise.all([
     Trader.countDocuments(filter),

@@ -492,23 +492,29 @@ export function Switch({
 /* ─────────────────────────── UnsavedBar ─────────────────────────────────── */
 export function UnsavedBar({
   show,
+  visible,
   saving,
   onSave,
   onReset,
+  onDiscard,
 }: {
-  show: boolean;
+  show?: boolean;
+  visible?: boolean;
   saving: boolean;
-  onSave: () => void;
+  onSave: () => void | Promise<void>;
   onReset?: () => void;
+  onDiscard?: () => void;
 }) {
-  if (!show) return null;
+  const isVisible = visible ?? show ?? false;
+  const handleDiscard = onDiscard ?? onReset;
+  if (!isVisible) return null;
   return (
     <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-2xl border border-hairline-strong bg-card/95 p-3 px-5 shadow-[0_16px_40px_-12px_rgba(0,0,0,.5)] backdrop-blur-md animate-[f-modalin_.25s_ease-out]">
       <div className="flex items-center gap-4">
         <span className="text-cell font-medium text-ink">You have unsaved changes</span>
         <div className="flex items-center gap-2">
-          {onReset && (
-            <Button variant="ghost" size="sm" disabled={saving} onClick={onReset}>
+          {handleDiscard && (
+            <Button variant="ghost" size="sm" disabled={saving} onClick={handleDiscard}>
               Discard
             </Button>
           )}
@@ -520,6 +526,8 @@ export function UnsavedBar({
     </div>
   );
 }
+
+export { Drawer } from "./Drawer";
 
 /* ─────────────────────────── EmptyState ─────────────────────────────────── */
 export function EmptyState({

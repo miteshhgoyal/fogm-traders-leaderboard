@@ -7,7 +7,7 @@ export interface Column<T> {
   key: string;
   header: string;
   sortable?: boolean;
-  render?: (row: T) => ReactNode;
+  render?: (row: T, index?: number) => ReactNode;
   align?: "left" | "center" | "right";
   defaultVisible?: boolean;
 }
@@ -257,7 +257,7 @@ export function DataTable<T>({
                         }`}
                       >
                         {col.render
-                          ? col.render(row)
+                          ? col.render(row, i)
                           : String((row as Record<string, unknown>)[col.key] ?? "–")}
                       </td>
                     ))}

@@ -645,14 +645,16 @@ export default function JoinModal() {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [authError, setAuthError] = useState("");
+  const [prevModal, setPrevModal] = useState(modal);
 
-  // reset whenever the join modal (re)opens
-  useEffect(() => {
+  // reset whenever the join modal (re)opens without cascading renders
+  if (prevModal !== modal) {
+    setPrevModal(modal);
     if (modal === "join") {
       setStep("email");
       setAuthError("");
     }
-  }, [modal]);
+  }
 
   const afterVerify = useCallback(async (): Promise<string | null> => {
     const me = await refresh();

@@ -24,16 +24,24 @@ export async function GET(req: Request): Promise<Response> {
   const sortField = url.searchParams.get("sortField") ?? "createdAt";
   const sortDir = url.searchParams.get("sortDir") === "asc" ? 1 : -1;
   
+  const showName = url.searchParams.get("showName");
+  const showPhoto = url.searchParams.get("showPhoto");
+
   const filter: Record<string, unknown> = {};
-  if (search) {
+  if (search.trim()) {
+    const safeRegex = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     filter.$or = [
-      { name: { $regex: search, $options: "i" } },
-      { email: { $regex: search, $options: "i" } },
+      { name: { $regex: safeRegex, $options: "i" } },
+      { email: { $regex: safeRegex, $options: "i" } },
     ];
   }
   if (status === "active" || status === "disabled") filter.status = status;
   if (profileComplete === "true") filter.profileComplete = true;
   if (profileComplete === "false") filter.profileComplete = false;
+  if (showName === "true") filter.showName = true;
+  if (showName === "false") filter.showName = false;
+  if (showPhoto === "true") filter.showPhoto = true;
+  if (showPhoto === "false") filter.showPhoto = false;
   if (country) filter.country = country;
   
   const allowedSortFields = ["createdAt", "lastLoginAt", "loginCount", "name", "email", "country", "status"];

@@ -1,12 +1,22 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import {
+  Badge,
+  Button,
+  Card,
+  Field,
+  Input,
+  PageHeader,
+  Select,
+  Switch,
+} from "@/components/admin/AdminPrimitives";
 import { DataTable, type Column } from "@/components/admin/DataTable";
 import { Drawer } from "@/components/admin/Drawer";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { useToast } from "@/components/admin/Toast";
-import { FormField, SwitchField } from "@/components/admin/FormField";
+import { useFetch } from "@/lib/use-async";
 
 interface UserRow {
   id: string;
@@ -30,15 +40,19 @@ interface UsersApiResponse {
   users: UserRow[];
 }
 
+function countryFlagEmoji(code: string): string {
+  if (!code || code.length !== 2) return "🌐";
+  const upper = code.toUpperCase();
+  const c1 = 127397 + upper.charCodeAt(0);
+  const c2 = 127397 + upper.charCodeAt(1);
+  return String.fromCodePoint(c1, c2);
+}
+
 function AdminUsersContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
-
-  const [data, setData] = useState<UsersApiResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // URL state
   const search = searchParams.get("search") ?? "";
@@ -67,7 +81,7 @@ function AdminUsersContent() {
 
   // Confirm dialogs
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [confirmBulkAction, setConfirmBulkAction] = useState<string | null>(null);
+  const [confirmBulkAction, setConfirmBulkAction] = useState<"enable" | "disable" | "force_sign_out" | null>(null);
 
   const updateParams = useCallback(
     (newParams: Record<string, string | number | undefined>) => {
@@ -84,35 +98,22 @@ function AdminUsersContent() {
     [router, pathname, searchParams]
   );
 
-  const loadUsers = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const qs = new URLSearchParams({
-        page: String(page),
-        pageSize: String(pageSize),
-        sortField,
-        sortDir,
-      });
-      if (search) qs.set("search", search);
-      if (status) qs.set("status", status);
-      if (profileComplete) qs.set("profileComplete", profileComplete);
-      if (country) qs.set("country", country);
+  const { data, loading, error, reload } = useFetch<UsersApiResponse>(async () => {
+    const qs = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+      sortField,
+      sortDir,
+    });
+    if (search) qs.set("search", search);
+    if (status) qs.set("status", status);
+    if (profileComplete) qs.set("profileComplete", profileComplete);
+    if (country) qs.set("country", country);
 
-      const res = await fetch(`/api/admin/users?${qs.toString()}`);
-      if (!res.ok) throw new Error("Failed to load users");
-      const json = await res.json() as UsersApiResponse;
-      setData(json);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error loading users");
-    } finally {
-      setLoading(false);
-    }
+    const res = await fetch(`/api/admin/users?${qs.toString()}`);
+    if (!res.ok) throw new Error("Failed to load users");
+    return (await res.json()) as UsersApiResponse;
   }, [page, pageSize, sortField, sortDir, search, status, profileComplete, country]);
-
-  useEffect(() => {
-    void loadUsers();
-  }, [loadUsers]);
 
   const openDrawer = (user: UserRow) => {
     setSelectedUser(user);
@@ -124,7 +125,7 @@ function AdminUsersContent() {
   };
 
   const handleSaveUser = async () => {
-    if (!selectedUser) return;
+    if (!selectedUser || savingUser) return;
     setSavingUser(true);
     try {
       const res = await fetch("/api/admin/users", {
@@ -141,7 +142,7 @@ function AdminUsersContent() {
       if (!res.ok) throw new Error("Failed to update user profile");
       showToast("User updated successfully");
       setDrawerOpen(false);
-      void loadUsers();
+      reload();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Failed to save user", "error");
     } finally {
@@ -162,7 +163,7 @@ function AdminUsersContent() {
       if (selectedUser?.id === user.id) {
         setSelectedUser({ ...selectedUser, status: nextStatus });
       }
-      void loadUsers();
+      reload();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Update failed", "error");
     }
@@ -191,13 +192,13 @@ function AdminUsersContent() {
       showToast("User deleted permanently");
       setConfirmDeleteId(null);
       setDrawerOpen(false);
-      void loadUsers();
+      reload();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Delete failed", "error");
     }
   };
 
-  const handleBulkAction = async (action: "disable" | "enable" | "force_sign_out" | "delete") => {
+  const handleBulkAction = async (action: "disable" | "enable" | "force_sign_out") => {
     if (selectedIds.length === 0) return;
     try {
       const res = await fetch("/api/admin/users/bulk", {
@@ -209,7 +210,7 @@ function AdminUsersContent() {
       showToast(`Bulk action (${action}) completed for ${selectedIds.length} users`);
       setSelectedIds([]);
       setConfirmBulkAction(null);
-      void loadUsers();
+      reload();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Bulk action failed", "error");
     }
@@ -222,14 +223,14 @@ function AdminUsersContent() {
       sortable: true,
       render: (u) => (
         <div className="flex items-center gap-3">
-          <div className="size-8 shrink-0 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold grid place-items-center text-xs">
+          <div className="size-9 shrink-0 rounded-full bg-accent/15 border border-accent/25 text-accent font-bold grid place-items-center text-xs">
             {u.name ? u.name.slice(0, 2).toUpperCase() : "AT"}
           </div>
           <div className="min-w-0">
-            <div className="font-semibold text-gray-900 dark:text-white truncate">
-              {u.name || <span className="italic text-gray-400">Anonymous trader</span>}
+            <div className="font-semibold text-ink truncate">
+              {u.name || <span className="italic text-mute">Anonymous trader</span>}
             </div>
-            <div className="text-xs text-gray-500 truncate">{u.email}</div>
+            <div className="text-meta text-mute truncate">{u.email}</div>
           </div>
         </div>
       ),
@@ -238,186 +239,194 @@ function AdminUsersContent() {
       key: "country",
       header: "Country",
       sortable: true,
-      render: (u) => <span>{u.country ?? "–"}</span>,
+      render: (u) => (
+        <span className="flex items-center gap-1.5 font-mono text-meta">
+          {u.country ? (
+            <>
+              <span>{countryFlagEmoji(u.country)}</span>
+              <span>{u.country.toUpperCase()}</span>
+            </>
+          ) : (
+            <span className="text-faint">–</span>
+          )}
+        </span>
+      ),
     },
     {
       key: "status",
       header: "Status",
       sortable: true,
       render: (u) => (
-        <span
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-            u.status === "active"
-              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-              : "bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300"
-          }`}
-        >
+        <Badge variant={u.status === "active" ? "up" : "down"}>
           {u.status}
-        </span>
+        </Badge>
       ),
     },
     {
       key: "profileComplete",
-      header: "Complete",
+      header: "Profile",
+      sortable: true,
       render: (u) => (
-        <span className={u.profileComplete ? "text-emerald-600 font-bold" : "text-gray-400"}>
-          {u.profileComplete ? "Yes" : "No"}
-        </span>
+        <Badge variant={u.profileComplete ? "accent" : "mute"}>
+          {u.profileComplete ? "Complete" : "Incomplete"}
+        </Badge>
       ),
     },
     {
-      key: "showName",
-      header: "Show Name",
-      render: (u) => <span>{u.showName ? "✓" : "–"}</span>,
-    },
-    {
-      key: "showPhoto",
-      header: "Show Photo",
-      render: (u) => <span>{u.showPhoto ? "✓" : "–"}</span>,
-    },
-    {
-      key: "loginCount",
-      header: "Logins",
-      sortable: true,
-      align: "right",
-      render: (u) => <span className="tabular-nums font-mono">{u.loginCount}</span>,
+      key: "privacy",
+      header: "Privacy Flags",
+      render: (u) => (
+        <div className="flex flex-col gap-0.5 text-meta">
+          <span className={u.showName ? "text-up font-medium" : "text-faint"}>
+            {u.showName ? "✓ Name visible" : "✗ Masked publicly"}
+          </span>
+          <span className={u.showPhoto ? "text-up font-medium" : "text-faint"}>
+            {u.showPhoto ? "✓ Photo visible" : "✗ Avatar hidden"}
+          </span>
+        </div>
+      ),
     },
     {
       key: "createdAt",
-      header: "Joined",
+      header: "Registered",
       sortable: true,
       render: (u) => (
-        <span className="text-xs text-gray-500 whitespace-nowrap">
+        <span className="text-meta text-mute tabular-nums">
           {new Date(u.createdAt).toLocaleDateString()}
         </span>
       ),
     },
     {
-      key: "lastLoginAt",
-      header: "Last Login",
-      sortable: true,
+      key: "actions",
+      header: "",
       render: (u) => (
-        <span className="text-xs text-gray-500 whitespace-nowrap">
-          {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : "Never"}
-        </span>
+        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <Button variant="ghost" size="sm" onClick={() => openDrawer(u)}>
+            Edit
+          </Button>
+        </div>
       ),
     },
   ];
 
+  const exportUrl = `/api/admin/users/export?${new URLSearchParams({
+    search,
+    status,
+  }).toString()}`;
+
   return (
-    <div className="space-y-6">
-      {/* Header and Filter Controls */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Registered Users</h1>
-          <p className="text-xs text-gray-500">Manage user privacy, account status, and credentials</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <a
-            href={`/api/admin/users/export?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-          >
-            📥 Export CSV
-          </a>
-        </div>
-      </div>
-
-      {/* Filters Bar */}
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <div className="min-w-[200px] flex-1">
-          <input
-            type="search"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") updateParams({ search: searchInput, page: 1 });
-            }}
-            placeholder="Search by name or email (press Enter)…"
-            className="h-9 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-xs text-gray-900 outline-none focus:border-indigo-500 dark:border-gray-700 dark:text-white"
-          />
-        </div>
-
-        <select
-          value={status}
-          onChange={(e) => updateParams({ status: e.target.value, page: 1 })}
-          className="h-9 rounded-lg border border-gray-300 bg-transparent px-2.5 text-xs text-gray-700 outline-none focus:border-indigo-500 dark:border-gray-700 dark:text-gray-300"
+    <div className="space-y-6 animate-[f-fadein_.3s_ease-out]">
+      <PageHeader
+        title="Users (CRM)"
+        description="Manage championship accounts, privacy visibility, and authentication states."
+      >
+        <a
+          href={exportUrl}
+          download="fogm-users.csv"
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-hairline-strong bg-card px-4 text-meta font-semibold text-ink hover:border-accent hover:bg-alt transition"
         >
-          <option value="">All Statuses</option>
-          <option value="active">Active</option>
-          <option value="disabled">Disabled</option>
-        </select>
+          <svg className="size-4 text-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          <span>Export CSV</span>
+        </a>
+      </PageHeader>
 
-        <select
-          value={profileComplete}
-          onChange={(e) => updateParams({ profileComplete: e.target.value, page: 1 })}
-          className="h-9 rounded-lg border border-gray-300 bg-transparent px-2.5 text-xs text-gray-700 outline-none focus:border-indigo-500 dark:border-gray-700 dark:text-gray-300"
-        >
-          <option value="">Profile Status</option>
-          <option value="true">Complete</option>
-          <option value="false">Incomplete</option>
-        </select>
+      {/* Filter Toolbar */}
+      <Card>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex flex-1 flex-wrap items-center gap-3">
+            {/* Search Box */}
+            <div className="relative min-w-[240px] flex-1">
+              <svg className="absolute left-3.5 top-3.5 size-4 text-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              <Input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") updateParams({ search: searchInput, page: 1 });
+                }}
+                placeholder="Search name or email… (press Enter)"
+                className="pl-10"
+              />
+            </div>
 
-        <button
-          type="button"
-          onClick={() => updateParams({ search: searchInput, page: 1 })}
-          className="h-9 rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-white hover:bg-indigo-700"
-        >
-          Search
-        </button>
+            {/* Status Filter */}
+            <div className="w-40">
+              <Select
+                value={status}
+                options={[
+                  { value: "", label: "Status: All" },
+                  { value: "active", label: "Active" },
+                  { value: "disabled", label: "Disabled" },
+                ]}
+                onChange={(val) => updateParams({ status: val, page: 1 })}
+              />
+            </div>
 
-        {(search || status || profileComplete || country) && (
-          <button
-            type="button"
-            onClick={() => {
-              setSearchInput("");
-              updateParams({ search: undefined, status: undefined, profileComplete: undefined, country: undefined, page: 1 });
-            }}
-            className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white underline ml-2"
-          >
-            Clear Filters
-          </button>
-        )}
-      </div>
+            {/* Profile Filter */}
+            <div className="w-44">
+              <Select
+                value={profileComplete}
+                options={[
+                  { value: "", label: "Profile: All" },
+                  { value: "true", label: "Complete" },
+                  { value: "false", label: "Incomplete" },
+                ]}
+                onChange={(val) => updateParams({ profileComplete: val, page: 1 })}
+              />
+            </div>
 
-      {/* Bulk Action Controls */}
-      {selectedIds.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-indigo-50 p-3 text-xs dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800">
-          <span className="font-semibold text-indigo-900 dark:text-indigo-300">
-            Bulk Actions for {selectedIds.length} user(s):
-          </span>
-          <button
-            type="button"
-            onClick={() => handleBulkAction("enable")}
-            className="px-2.5 py-1 rounded bg-white dark:bg-gray-800 border border-indigo-200 font-medium hover:bg-indigo-100"
-          >
-            Enable
-          </button>
-          <button
-            type="button"
-            onClick={() => handleBulkAction("disable")}
-            className="px-2.5 py-1 rounded bg-white dark:bg-gray-800 border border-indigo-200 font-medium hover:bg-indigo-100 text-amber-700"
-          >
-            Disable
-          </button>
-          <button
-            type="button"
-            onClick={() => handleBulkAction("force_sign_out")}
-            className="px-2.5 py-1 rounded bg-white dark:bg-gray-800 border border-indigo-200 font-medium hover:bg-indigo-100 text-purple-700"
-          >
-            Force Sign Out
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmBulkAction("delete")}
-            className="px-2.5 py-1 rounded bg-red-600 text-white font-medium hover:bg-red-700"
-          >
-            Delete Selected
-          </button>
+            {(search || status || profileComplete || country) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchInput("");
+                  updateParams({ search: "", status: "", profileComplete: "", country: "", page: 1 });
+                }}
+              >
+                Clear Filters
+              </Button>
+            )}
+          </div>
+
+          {/* Bulk Actions Menu */}
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-2 border-t lg:border-t-0 pt-3 lg:pt-0 border-hairline">
+              <span className="text-meta text-mute">{selectedIds.length} selected:</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setConfirmBulkAction("enable")}
+              >
+                Set Active
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setConfirmBulkAction("disable")}
+              >
+                Disable
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-down hover:bg-down/10"
+                onClick={() => setConfirmBulkAction("force_sign_out")}
+              >
+                Force Sign Out
+              </Button>
+            </div>
+          )}
         </div>
-      )}
+      </Card>
 
-      {/* User Data Table */}
+      {/* Users DataTable */}
       <DataTable
         columns={columns}
         data={data?.users ?? []}
@@ -433,145 +442,142 @@ function AdminUsersContent() {
         onSelectionChange={setSelectedIds}
         onPageChange={(p) => updateParams({ page: p })}
         onPageSizeChange={(ps) => updateParams({ pageSize: ps, page: 1 })}
-        onSortChange={(f) => {
-          const nextDir = sortField === f && sortDir === "asc" ? "desc" : "asc";
-          updateParams({ sortField: f, sortDir: nextDir });
+        onSortChange={(sf) => {
+          const nextDir = sortField === sf && sortDir === "asc" ? "desc" : "asc";
+          updateParams({ sortField: sf, sortDir: nextDir });
         }}
         onRowClick={openDrawer}
       />
 
-      {/* Detail Drawer */}
+      {/* User Edit Drawer */}
       <Drawer
         isOpen={drawerOpen}
-        title={selectedUser?.name || "Trader Profile"}
+        title={selectedUser?.name ? selectedUser.name : "Edit Trader Profile"}
+        description={selectedUser?.email}
         onClose={() => setDrawerOpen(false)}
+        footer={
+          <div className="flex w-full items-center justify-between">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-down hover:bg-down/10"
+              onClick={() => selectedUser && setConfirmDeleteId(selectedUser.id)}
+            >
+              Delete User
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setDrawerOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" size="sm" loading={savingUser} disabled={savingUser} onClick={handleSaveUser}>
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        }
       >
         {selectedUser && (
           <div className="space-y-6">
-            <div className="flex items-center gap-4 pb-4 border-b border-gray-100 dark:border-gray-800">
-              <div className="size-16 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold text-xl grid place-items-center shrink-0">
-                {selectedUser.name ? selectedUser.name.slice(0, 2).toUpperCase() : "AT"}
-              </div>
-              <div className="min-w-0">
-                <div className="text-base font-bold text-gray-900 dark:text-white truncate">
-                  {selectedUser.name || "Anonymous trader"}
-                </div>
-                <div className="text-xs text-gray-500 font-mono truncate">{selectedUser.email}</div>
-                <div className="mt-1">
-                  <span
-                    className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${
-                      selectedUser.status === "active"
-                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                        : "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
-                    }`}
-                  >
-                    {selectedUser.status}
-                  </span>
-                </div>
+            <div className="space-y-4">
+              <Field label="Display Name">
+                <Input
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  placeholder="Trader name"
+                />
+              </Field>
+
+              <Field label="Country Code" hint="2-letter ISO (e.g. US, GB, AE)">
+                <Input
+                  value={editingCountry}
+                  maxLength={2}
+                  onChange={(e) => setEditingCountry(e.target.value.toUpperCase())}
+                  placeholder="GB"
+                  className="font-mono uppercase"
+                />
+              </Field>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-hairline bg-alt p-4">
+              <h4 className="text-cell font-semibold text-ink">Public Privacy Toggles</h4>
+              <Switch
+                label="Show Display Name"
+                description="When off, trader appears as 'Anonymous trader' publicly"
+                checked={editingShowName}
+                onChange={setEditingShowName}
+              />
+              <div className="border-t border-hairline pt-3">
+                <Switch
+                  label="Show Photo"
+                  description="When off, initials are displayed on leaderboard"
+                  checked={editingShowPhoto}
+                  onChange={setEditingShowPhoto}
+                />
               </div>
             </div>
 
-            <div className="space-y-4">
-              <FormField label="Display Name">
-                <input
-                  type="text"
-                  value={editingName}
-                  onChange={(e) => setEditingName(e.target.value)}
-                  className="w-full h-10 rounded-lg border border-gray-300 bg-transparent px-3 text-sm dark:border-gray-700"
-                />
-              </FormField>
-
-              <FormField label="Country Code">
-                <input
-                  type="text"
-                  maxLength={2}
-                  value={editingCountry}
-                  onChange={(e) => setEditingCountry(e.target.value)}
-                  placeholder="US, GB, etc."
-                  className="w-full h-10 rounded-lg border border-gray-300 bg-transparent px-3 text-sm uppercase dark:border-gray-700"
-                />
-              </FormField>
-
-              <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-                <SwitchField
-                  label="Show Display Name"
-                  checked={editingShowName}
-                  onChange={setEditingShowName}
-                  hint="Off: Trader appears as 'Anonymous trader' on public boards"
-                />
-                <SwitchField
-                  label="Show Photo"
-                  checked={editingShowPhoto}
-                  onChange={setEditingShowPhoto}
-                  hint="Off: Photo replaced by initials"
-                />
-              </div>
-
-              <div className="pt-4 flex gap-2">
-                <button
-                  type="button"
-                  disabled={savingUser}
-                  onClick={handleSaveUser}
-                  className="flex-1 h-10 rounded-lg bg-indigo-600 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  {savingUser ? "Saving…" : "Save Changes"}
-                </button>
-              </div>
-
-              {/* Status and Session Actions */}
-              <div className="pt-4 border-t border-gray-100 dark:border-gray-800 space-y-2">
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleToggleStatus(selectedUser)}
-                    className="flex-1 h-9 rounded-lg border border-gray-300 dark:border-gray-700 text-xs font-semibold hover:bg-gray-50 dark:hover:bg-gray-800"
-                  >
-                    {selectedUser.status === "active" ? "Disable User" : "Enable User"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleForceSignOut(selectedUser.id)}
-                    className="flex-1 h-9 rounded-lg border border-gray-300 dark:border-gray-700 text-xs font-semibold hover:bg-gray-50 dark:hover:bg-gray-800"
-                  >
-                    Force Sign Out
-                  </button>
+            <div className="space-y-3 rounded-2xl border border-hairline bg-alt p-4">
+              <h4 className="text-cell font-semibold text-ink">Account & Security</h4>
+              <div className="flex items-center justify-between text-cell">
+                <div>
+                  <span className="block font-medium text-ink">Account Status</span>
+                  <span className="block text-meta text-mute">
+                    Currently {selectedUser.status === "active" ? "Enabled" : "Disabled"}
+                  </span>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => setConfirmDeleteId(selectedUser.id)}
-                  className="w-full h-9 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 text-xs font-semibold dark:border-red-800 dark:hover:bg-red-950/40"
+                <Button
+                  variant={selectedUser.status === "active" ? "danger" : "secondary"}
+                  size="sm"
+                  onClick={() => handleToggleStatus(selectedUser)}
                 >
-                  Delete User Permanently
-                </button>
+                  {selectedUser.status === "active" ? "Disable Account" : "Enable Account"}
+                </Button>
               </div>
+
+              <div className="border-t border-hairline pt-3 flex items-center justify-between text-cell">
+                <div>
+                  <span className="block font-medium text-ink">Active Sessions</span>
+                  <span className="block text-meta text-mute">Force sign-out across all devices</span>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleForceSignOut(selectedUser.id)}
+                >
+                  Invalidate JWT
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-hairline bg-card p-3 text-meta text-mute space-y-1">
+              <div>Logins: <span className="text-ink font-semibold">{selectedUser.loginCount ?? 0}</span></div>
+              <div>Last Login: <span className="text-ink">{selectedUser.lastLoginAt ? new Date(selectedUser.lastLoginAt).toLocaleString() : "Never"}</span></div>
+              <div>Created: <span className="text-ink">{new Date(selectedUser.createdAt).toLocaleString()}</span></div>
             </div>
           </div>
         )}
       </Drawer>
 
-      {/* Delete Confirmation */}
+      {/* Delete User Confirm */}
       <ConfirmDialog
         isOpen={Boolean(confirmDeleteId)}
-        title="Delete User Account"
-        message="This action permanently deletes the user account. Their uploaded avatar and history will be cleared. This action cannot be undone."
-        confirmLabel="Delete User"
-        typeToConfirm="delete"
-        onConfirm={() => {
-          if (confirmDeleteId) void handleDeleteUser(confirmDeleteId);
-        }}
-        onCancel={() => setConfirmDeleteId(null)}
+        title="Permanently Delete Trader Account?"
+        description="This action immediately purges the user doc, their rank card, and session records. This cannot be undone."
+        confirmText="Yes, Delete Permanently"
+        confirmPhrase="DELETE"
+        danger
+        onConfirm={() => confirmDeleteId && handleDeleteUser(confirmDeleteId)}
+        onClose={() => setConfirmDeleteId(null)}
       />
 
-      {/* Bulk Delete Confirmation */}
+      {/* Bulk Action Confirm */}
       <ConfirmDialog
-        isOpen={Boolean(confirmBulkAction === "delete")}
-        title="Delete Multiple Users"
-        message={`Are you sure you want to permanently delete ${selectedIds.length} users? This cannot be undone.`}
-        confirmLabel="Delete All Selected"
-        typeToConfirm="delete"
-        onConfirm={() => void handleBulkAction("delete")}
-        onCancel={() => setConfirmBulkAction(null)}
+        isOpen={Boolean(confirmBulkAction)}
+        title={`Execute Bulk ${confirmBulkAction?.toUpperCase()}?`}
+        description={`This will apply '${confirmBulkAction}' to ${selectedIds.length} selected user account(s).`}
+        confirmText={`Confirm ${confirmBulkAction}`}
+        onConfirm={() => confirmBulkAction && handleBulkAction(confirmBulkAction)}
+        onClose={() => setConfirmBulkAction(null)}
       />
     </div>
   );
@@ -579,7 +585,7 @@ function AdminUsersContent() {
 
 export default function AdminUsersPage() {
   return (
-    <Suspense fallback={<div className="py-20 text-center text-sm text-muted-foreground">Loading users...</div>}>
+    <Suspense fallback={<div className="py-20 text-center text-cell text-mute">Loading CRM…</div>}>
       <AdminUsersContent />
     </Suspense>
   );

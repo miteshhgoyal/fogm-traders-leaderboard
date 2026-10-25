@@ -5,6 +5,7 @@ export interface AsyncState<T> {
   loading: boolean;
   error: string | null;
   reload: () => void;
+  refetch: () => void;
   setData: React.Dispatch<React.SetStateAction<T | null>>;
 }
 
@@ -51,5 +52,5 @@ export function useFetch<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger, ...deps]);
 
-  return { data, loading, error, reload, setData };
+  return { data, loading, error, reload, refetch: reload, setData };
 }

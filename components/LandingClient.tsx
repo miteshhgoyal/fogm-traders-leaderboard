@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
 } from "react";
@@ -131,15 +132,15 @@ const cn = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).jo
 
 /* ═══════════════════════════ ANIMATION HELPERS ══════════════════════════ */
 function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mq.matches);
-    const on = () => setReduced(mq.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-  return reduced;
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+      mq.addEventListener("change", onStoreChange);
+      return () => mq.removeEventListener("change", onStoreChange);
+    },
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    () => false
+  );
 }
 
 function useReveal<T extends HTMLElement>(threshold = 0.15): [React.RefObject<T | null>, boolean] {
@@ -186,10 +187,7 @@ function CountUp({ value, format }: { value: number; format: (n: number) => stri
   const [disp, setDisp] = useState(value);
   const reduced = usePrefersReducedMotion();
   useEffect(() => {
-    if (reduced) {
-      setDisp(value);
-      return;
-    }
+    if (reduced) return;
     let start: number | null = null;
     const from = disp;
     const to = value;
@@ -204,7 +202,7 @@ function CountUp({ value, format }: { value: number; format: (n: number) => stri
     const req = requestAnimationFrame(step);
     return () => cancelAnimationFrame(req);
   }, [value, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <>{format(disp)}</>;
+  return <>{format(reduced ? value : disp)}</>;
 }
 
 function Track({ children, dur = 30 }: { children: ReactNode; dur?: number }) {

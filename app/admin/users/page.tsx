@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { DataTable, type Column } from "@/components/admin/DataTable";
 import { Drawer } from "@/components/admin/Drawer";
@@ -30,7 +30,7 @@ interface UsersApiResponse {
   users: UserRow[];
 }
 
-export default function AdminUsersPage() {
+function AdminUsersContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -574,5 +574,13 @@ export default function AdminUsersPage() {
         onCancel={() => setConfirmBulkAction(null)}
       />
     </div>
+  );
+}
+
+export default function AdminUsersPage() {
+  return (
+    <Suspense fallback={<div className="py-20 text-center text-sm text-muted-foreground">Loading users...</div>}>
+      <AdminUsersContent />
+    </Suspense>
   );
 }

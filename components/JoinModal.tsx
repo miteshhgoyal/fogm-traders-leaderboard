@@ -161,9 +161,9 @@ function EmailStep({ onSent }: { onSent: (email: string) => void }) {
   };
   return (
     <form onSubmit={(e) => void submit(e)} noValidate>
-      <p className="text-label uppercase text-accent">Join the pool</p>
-      <h2 id="join-title" className="mt-3 text-ctitle text-ink">Log in or create your account</h2>
-      <p className="mb-6 mt-2 text-cell text-mute">Enter your email and we will send you a 6-digit code. No password needed.</p>
+      <p className="text-label uppercase text-accent">FOGM Championship</p>
+      <h2 id="join-title" className="mt-3 text-ctitle text-ink">See where you rank</h2>
+      <p className="mb-6 mt-2 text-cell text-mute">Enter your email to unlock your rank card.</p>
       <label htmlFor="join-email" className="mb-2 block text-meta font-medium text-ink">Email</label>
       <input
         id="join-email"
@@ -182,7 +182,7 @@ function EmailStep({ onSent }: { onSent: (email: string) => void }) {
       <button type="submit" disabled={busy || email.trim() === ""} className={`${BTN_PRIMARY} mt-5`}>
         {busy && <Spinner />}Send code
       </button>
-      <p className="mt-4 text-center text-meta text-faint">By continuing you agree to the contest terms.</p>
+      <p className="mt-4 text-center text-meta text-faint">By continuing you agree to the championship rules.</p>
     </form>
   );
 }
@@ -442,7 +442,8 @@ function ProfileStep({ photoOnly, onDone }: { photoOnly?: boolean; onDone: () =>
   const { user, refresh } = useAuth();
   const [name, setName] = useState(user?.name ?? "");
   const [avatar, setAvatar] = useState<string | null>(user?.avatarUrl ?? null);
-  const [consent, setConsent] = useState(user?.publicConsent ?? false);
+  const [showName, setShowName] = useState(user?.showName ?? true);
+  const [showPhoto, setShowPhoto] = useState(user?.showPhoto ?? true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const errId = useId();
@@ -453,7 +454,7 @@ function ProfileStep({ photoOnly, onDone }: { photoOnly?: boolean; onDone: () =>
     if (!photoOnly && (n.length < 2 || n.length > 30)) return setErr("Display name must be 2 to 30 characters.");
     setBusy(true);
     setErr("");
-    const body = photoOnly ? { avatarUrl: avatar } : { name: n, avatarUrl: avatar, publicConsent: consent };
+    const body = photoOnly ? { avatarUrl: avatar } : { name: n, avatarUrl: avatar, showName, showPhoto };
     const r = await postJson("/api/me", body, "PATCH");
     if (!r.ok) {
       setBusy(false);
@@ -469,7 +470,7 @@ function ProfileStep({ photoOnly, onDone }: { photoOnly?: boolean; onDone: () =>
       <p className="text-label uppercase text-accent">{photoOnly ? "Your photo" : "Almost there"}</p>
       <h2 id="join-title" className="mt-3 text-ctitle text-ink">{photoOnly ? "Change your photo" : "Set up your profile"}</h2>
       <p className="mb-6 mt-2 text-cell text-mute">
-        {photoOnly ? "Your new photo shows on your rank card and, if you opted in, on the leaderboard." : "This is how you appear on your rank card and, if you opt in, on the public leaderboard."}
+        {photoOnly ? "Your new photo appears on your rank card and the leaderboard." : "Choose how your identity appears on your rank card and the championship leaderboard."}
       </p>
       {!photoOnly && (
         <div className="mb-5">
@@ -492,13 +493,50 @@ function ProfileStep({ photoOnly, onDone }: { photoOnly?: boolean; onDone: () =>
       )}
       <AvatarUploader name={name || user?.name || "You"} value={avatar} onChange={setAvatar} />
       {!photoOnly && (
-        <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-hairline bg-alt p-4 text-cell text-ink">
-          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 size-5 shrink-0 cursor-pointer accent-[var(--accent)]" />
-          <span>
-            Show my name and photo on the public leaderboard
-            <span className="mt-1 block text-meta text-mute">Unticked, you appear as &ldquo;Anonymous trader&rdquo; everywhere, including your shareable card.</span>
-          </span>
-        </label>
+        <div className="mt-5 space-y-3 rounded-2xl border border-hairline bg-alt p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <span className="block text-cell font-medium text-ink">Show my display name</span>
+              <span className="block text-meta text-mute">If off, you appear as &ldquo;Anonymous trader&rdquo; everywhere.</span>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showName}
+              onClick={() => setShowName(!showName)}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                showName ? "bg-accent" : "bg-hairline-strong"
+              }`}
+            >
+              <span
+                className={`inline-block size-4 transform rounded-full bg-white transition-transform ${
+                  showName ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+          <div className="border-t border-hairline pt-3 flex items-center justify-between gap-3">
+            <div>
+              <span className="block text-cell font-medium text-ink">Show my photo</span>
+              <span className="block text-meta text-mute">If off, initials are displayed instead of your avatar.</span>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showPhoto}
+              onClick={() => setShowPhoto(!showPhoto)}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                showPhoto ? "bg-accent" : "bg-hairline-strong"
+              }`}
+            >
+              <span
+                className={`inline-block size-4 transform rounded-full bg-white transition-transform ${
+                  showPhoto ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
       )}
       <ErrorLine id={errId}>{err}</ErrorLine>
       <button type="submit" disabled={busy} className={`${BTN_PRIMARY} mt-5`}>
@@ -515,8 +553,8 @@ function SuccessStep({ onClose }: { onClose: () => void }) {
   return (
     <div>
       <p className="text-label uppercase text-accent">You are in</p>
-      <h2 id="join-title" className="mt-3 text-ctitle text-ink">{entry ? `You are #${entry.rank} on the board` : "Welcome to the pool"}</h2>
-      <p className="mb-5 mt-2 text-cell text-mute">Share your rank card and challenge your friends.</p>
+      <h2 id="join-title" className="mt-3 text-ctitle text-ink">{entry ? `You are #${entry.rank} on the board` : "Welcome to the Championship"}</h2>
+      <p className="mb-5 mt-2 text-cell text-mute">Share your rank card and challenge other traders.</p>
       <ShareCard userId={user.id} rank={entry?.rank ?? null} />
       <button type="button" onClick={onClose} data-autofocus className={`${BTN_GHOST} mt-2`}>Done</button>
     </div>

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: { default: "Admin", template: "%s | FOGM Admin" },
 };
 
-export default async function AdminLayout({ children }: { children: ReactNode }) {
+async function AdminAuthGuard({ children }: { children: ReactNode }) {
   if (!isAdminConfigured()) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 p-4 font-sans">
@@ -31,11 +31,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   const pathname = h.get("x-pathname") || "";
 
   if (pathname === "/admin/login") {
-    return (
-      <Suspense fallback={<div className="min-h-screen grid place-items-center text-sm text-gray-500">Loading…</div>}>
-        {children}
-      </Suspense>
-    );
+    return <>{children}</>;
   }
 
   try {
@@ -44,9 +40,19 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     redirect("/admin/login");
   }
 
+  return <AdminShell>{children}</AdminShell>;
+}
+
+export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <Suspense fallback={<div className="min-h-screen grid place-items-center text-sm text-gray-500">Loading…</div>}>
-      <AdminShell>{children}</AdminShell>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background text-sm text-muted-foreground">
+          Loading administration...
+        </div>
+      }
+    >
+      <AdminAuthGuard>{children}</AdminAuthGuard>
     </Suspense>
   );
 }

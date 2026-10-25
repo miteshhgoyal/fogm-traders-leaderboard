@@ -6,8 +6,7 @@ import { AuthCtx, type AuthValue, type ModalKind } from "./auth-context";
 import JoinModal from "./JoinModal";
 
 const EMPTY: MeResponse = { user: null, entry: null };
-const DISMISS_KEY = "fogm-join-dismissed";
-const AUTO_OPEN_MS = 1500;
+const AUTO_OPEN_MS = 1000;
 
 async function fetchMe(): Promise<MeResponse> {
   try {
@@ -19,19 +18,26 @@ async function fetchMe(): Promise<MeResponse> {
   }
 }
 
-/** Owns the session state, the modal state and the 1.5s auto-open of the join popup. */
+/** Owns the session state, the modal state and the ~1s auto-open of the join popup on every page load. */
 export default function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<MeResponse>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<ModalKind>(null);
-  const opened = useRef(false);
+  const autoOpenedRef = useRef(false);
 
   const apply = useCallback((m: MeResponse) => {
-    // mock mode: the mock API needs to know who is signed in *before* the page refetches
+    // mock mode: the mock API needs to know who is signed in before the page refetches
     setMockSessionUser(
       m.user
-        ? { userId: m.user.id, name: m.user.name, avatarUrl: m.user.avatarUrl, publicConsent: m.user.publicConsent, country: m.user.country ?? undefined }
-        : null,
+        ? {
+            userId: m.user.id,
+            name: m.user.name,
+            avatarUrl: m.user.avatarUrl,
+            showName: m.user.showName,
+            showPhoto: m.user.showPhoto,
+            country: m.user.country ?? undefined,
+          }
+        : null
     );
     setMe(m);
   }, []);
@@ -54,28 +60,29 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [apply]);
 
-  /* auto-open once, 1.5s after first load, if signed out and not dismissed this session */
+  /* Auto-open JoinModal on EVERY visit ~1s after mount when logged out.
+     Fires once per page load (useRef).
+     Never fires on /admin/* or /u/* or when logged in. */
   useEffect(() => {
-    if (loading || me.user || opened.current) return;
-    let dismissed = false;
-    try {
-      dismissed = sessionStorage.getItem(DISMISS_KEY) === "1";
-    } catch {
-      /* storage blocked: treat as not dismissed */
+    if (loading || me.user || autoOpenedRef.current) return;
+
+    if (typeof window !== "undefined") {
+      const pathname = window.location.pathname;
+      if (pathname.startsWith("/admin") || pathname.startsWith("/u/")) {
+        return;
+      }
     }
-    if (dismissed) return;
-    opened.current = true;
-    const t = setTimeout(() => setModal((m) => m ?? "join"), AUTO_OPEN_MS);
+
+    autoOpenedRef.current = true;
+    const t = setTimeout(() => {
+      setModal((prev) => prev ?? "join");
+    }, AUTO_OPEN_MS);
+
     return () => clearTimeout(t);
   }, [loading, me.user]);
 
   const closeModal = useCallback(() => {
     setModal(null);
-    try {
-      sessionStorage.setItem(DISMISS_KEY, "1");
-    } catch {
-      /* ignore */
-    }
   }, []);
 
   const logout = useCallback(async () => {
@@ -88,7 +95,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthValue>(
     () => ({ loading, user: me.user, entry: me.entry, modal, openModal: setModal, closeModal, refresh, logout }),
-    [loading, me, modal, closeModal, refresh, logout],
+    [loading, me, modal, closeModal, refresh, logout]
   );
 
   return (

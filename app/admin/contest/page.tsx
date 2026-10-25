@@ -219,7 +219,7 @@ export default function AdminContestPage() {
           </FormField>
         </div>
 
-        <FormField label="Prize Fund (USD)" hint="Total prize pool value displayed" required>
+        <FormField label="Prize Fund (USD)" hint="Total prize fund value displayed" required>
           <div className="relative">
             <span className="absolute left-3 top-2.5 text-sm text-muted-foreground font-mono">$</span>
             <input
@@ -321,7 +321,7 @@ export default function AdminContestPage() {
                 <div className="flex-1">
                   <input
                     type="text"
-                    placeholder="Partner Name (e.g. Prime Brokerage)"
+                    placeholder="Partner Name (e.g. Prime Liquidity)"
                     value={partner.name}
                     onChange={(e) => updatePartner(idx, "name", e.target.value)}
                     className="w-full h-9 px-3 rounded border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"

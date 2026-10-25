@@ -43,7 +43,7 @@ const SettingsSchema = z.object({
       locale: z.string().default("en-US"),
     }).default(DEFAULT_SETTINGS.contest.currency),
   }).default(DEFAULT_SETTINGS.contest),
-  copy: z.record(z.string()).default(DEFAULT_SETTINGS.copy),
+  copy: z.record(z.string(), z.string()).default(DEFAULT_SETTINGS.copy),
   steps: z.array(z.object({
     title: z.string(),
     body: z.string(),

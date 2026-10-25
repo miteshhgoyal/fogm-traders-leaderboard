@@ -12,7 +12,7 @@ export async function POST(req: Request): Promise<Response> {
   
   try {
     const { revalidateTag } = await import("next/cache");
-    revalidateTag("settings");
+    revalidateTag("settings", "max");
   } catch {
     /* ignore */
   }

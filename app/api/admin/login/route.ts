@@ -28,10 +28,10 @@ async function checkRateLimit(ip: string): Promise<{ ok: boolean; retryAfter: nu
     RateLimit.findOne({ key: key1d }),
   ]);
   
-  if (rec15m && rec15m.hits >= MAX_PER_15_MIN && rec15m.resetAt > now) {
+  if (rec15m && rec15m.count >= MAX_PER_15_MIN && rec15m.resetAt > now) {
     return { ok: false, retryAfter: Math.ceil((rec15m.resetAt.getTime() - now.getTime()) / 1000) };
   }
-  if (rec1d && rec1d.hits >= MAX_PER_DAY && rec1d.resetAt > now) {
+  if (rec1d && rec1d.count >= MAX_PER_DAY && rec1d.resetAt > now) {
     return { ok: false, retryAfter: Math.ceil((rec1d.resetAt.getTime() - now.getTime()) / 1000) };
   }
   return { ok: true, retryAfter: 0 };
@@ -46,12 +46,12 @@ async function recordFailure(ip: string): Promise<void> {
   await Promise.all([
     RateLimit.findOneAndUpdate(
       { key: `admin_login:15m:${ip}` },
-      { $inc: { hits: 1 }, $setOnInsert: { resetAt: reset15m } },
+      { $inc: { count: 1 }, $setOnInsert: { resetAt: reset15m } },
       { upsert: true, new: true }
     ),
     RateLimit.findOneAndUpdate(
       { key: `admin_login:1d:${ip}` },
-      { $inc: { hits: 1 }, $setOnInsert: { resetAt: reset1d } },
+      { $inc: { count: 1 }, $setOnInsert: { resetAt: reset1d } },
       { upsert: true, new: true }
     ),
   ]);

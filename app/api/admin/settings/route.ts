@@ -48,7 +48,7 @@ export async function PATCH(req: Request): Promise<Response> {
   // Invalidate the settings cache tag
   try {
     const { revalidateTag } = await import("next/cache");
-    revalidateTag("settings");
+    revalidateTag("settings", "max");
   } catch {
     /* cache not available in this context */
   }

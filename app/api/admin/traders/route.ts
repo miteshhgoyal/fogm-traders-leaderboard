@@ -64,7 +64,7 @@ export async function POST(req: Request): Promise<Response> {
   }
   
   const parsed = TraderSchema.safeParse(await readJson(req));
-  if (!parsed.success) return fail(400, "invalid_input", { errors: parsed.error.errors });
+  if (!parsed.success) return fail(400, "invalid_input", { errors: parsed.error.issues });
   
   await dbConnect();
   const trader = await Trader.create(parsed.data);

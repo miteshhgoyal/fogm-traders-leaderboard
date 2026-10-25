@@ -57,7 +57,7 @@ export async function POST(req: Request): Promise<Response> {
     if (parsed.success) {
       valid.push(parsed.data);
     } else {
-      errors.push({ row: i + 2, error: parsed.error.errors.map((e) => e.message).join("; ") });
+      errors.push({ row: i + 2, error: parsed.error.issues.map((e) => e.message).join("; ") });
     }
   }
   

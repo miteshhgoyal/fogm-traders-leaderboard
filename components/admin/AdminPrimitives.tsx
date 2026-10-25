@@ -196,6 +196,60 @@ export function StatTile({
   );
 }
 
+/* ─────────────────────────── CountUp ────────────────────────────────────── */
+export function CountUp({
+  value,
+  duration = 1400,
+  formatter,
+}: {
+  value: number;
+  duration?: number;
+  formatter?: (n: number) => string;
+}) {
+  const [disp, setDisp] = useState(0);
+  const [started, setStarted] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || started) return;
+    const ob = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setStarted(true);
+          ob.disconnect();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    ob.observe(el);
+    return () => ob.disconnect();
+  }, [started]);
+
+  useEffect(() => {
+    if (!started) return;
+    let start: number | null = null;
+    const from = 0;
+    const to = value;
+    const step = (ts: number) => {
+      if (!start) start = ts;
+      const prog = Math.min((ts - start) / duration, 1);
+      const ease = prog === 1 ? 1 : 1 - Math.pow(2, -10 * prog);
+      setDisp(Math.round(from + (to - from) * ease));
+      if (prog < 1) requestAnimationFrame(step);
+    };
+    const req = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(req);
+  }, [started, value, duration]);
+
+  const fmt = formatter ?? ((n: number) => n.toLocaleString());
+  return (
+    <span ref={ref} className="tabular-nums">
+      {fmt(started ? disp : 0)}
+    </span>
+  );
+}
+
 /* ─────────────────────────── Form Field & Inputs ────────────────────────── */
 export function Field({
   label,

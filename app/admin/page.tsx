@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Badge, Card, PageHeader, Skeleton, StatTile } from "@/components/admin/AdminPrimitives";
+import { Badge, Card, CountUp, PageHeader, Skeleton, StatTile } from "@/components/admin/AdminPrimitives";
 import { useFetch } from "@/lib/use-async";
 
 interface DashboardStats {
@@ -132,7 +132,7 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile
           label="Total Users"
-          value={stats.totalUsers.toLocaleString()}
+          value={<CountUp value={stats.totalUsers} />}
           subtext="All registered accounts"
           tooltip="Cumulative total of all verified emails in the database."
           icon={
@@ -146,7 +146,7 @@ export default function AdminDashboardPage() {
         />
         <StatTile
           label="New in 7 Days"
-          value={`+${stats.newIn7d.toLocaleString()}`}
+          value={<>+<CountUp value={stats.newIn7d} /></>}
           subtext="Signups this week"
           delta={{ value: "Recent", positive: true }}
           tooltip="Accounts created in the last 7 calendar days."
@@ -158,7 +158,7 @@ export default function AdminDashboardPage() {
         />
         <StatTile
           label="Active (7 Days)"
-          value={stats.activeIn7d.toLocaleString()}
+          value={<CountUp value={stats.activeIn7d} />}
           subtext="Traders logged in"
           tooltip="Traders who authenticated or refreshed a session within the last 7 days."
           icon={
@@ -169,7 +169,7 @@ export default function AdminDashboardPage() {
         />
         <StatTile
           label="Profile Complete"
-          value={`${stats.profileCompletePct}%`}
+          value={<><CountUp value={stats.profileCompletePct} />%</>}
           subtext={`${stats.profileComplete} of ${stats.totalUsers}`}
           tooltip="Percentage of users who completed display name and onboarding."
           icon={

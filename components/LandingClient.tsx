@@ -161,20 +161,32 @@ function useReveal<T extends HTMLElement>(threshold = 0.15): [React.RefObject<T 
   return [ref, seen];
 }
 
-function Reveal({ children, className, variant = "up" }: { children: ReactNode; className?: string; variant?: "up" | "left" | "right" | "scale" }) {
-  const [ref, seen] = useReveal<HTMLDivElement>(0.12);
+function Reveal({
+  children,
+  className,
+  variant = "up",
+  delay = 0,
+}: {
+  children: ReactNode;
+  className?: string;
+  variant?: "up" | "left" | "right" | "scale" | "fade";
+  delay?: number;
+}) {
+  const [ref, seen] = useReveal<HTMLDivElement>(0.1);
   const vClass = {
     up: "translate-y-6",
     left: "-translate-x-6",
     right: "translate-x-6",
     scale: "scale-95",
+    fade: "",
   }[variant];
   return (
     <div
       ref={ref}
+      style={{ transitionDelay: `${delay}ms` }}
       className={cn(
-        "transition-all duration-700 ease-soft motion-reduce:transform-none motion-reduce:opacity-100",
-        seen ? "opacity-100 translate-x-0 translate-y-0 scale-100" : `opacity-0 ${vClass}`,
+        "transition-all duration-700 ease-soft motion-reduce:transform-none motion-reduce:opacity-100 motion-reduce:transition-none",
+        seen ? "opacity-100 translate-x-0 translate-y-0 scale-100 filter-none" : `opacity-0 ${vClass} blur-[2px]`,
         className
       )}
     >
@@ -183,26 +195,67 @@ function Reveal({ children, className, variant = "up" }: { children: ReactNode; 
   );
 }
 
-function CountUp({ value, format }: { value: number; format: (n: number) => string }) {
-  const [disp, setDisp] = useState(value);
+function CountUp({
+  value,
+  format,
+  duration = 1400,
+}: {
+  value: number;
+  format?: (n: number) => string;
+  duration?: number;
+}) {
+  const [disp, setDisp] = useState(0);
+  const [started, setStarted] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
   const reduced = usePrefersReducedMotion();
+
   useEffect(() => {
-    if (reduced) return;
+    const el = ref.current;
+    if (!el || started) return;
+    const ob = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setStarted(true);
+          ob.disconnect();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    ob.observe(el);
+    return () => ob.disconnect();
+  }, [started]);
+
+  useEffect(() => {
+    if (!started || reduced) return;
     let start: number | null = null;
-    const from = disp;
+    const from = 0;
     const to = value;
-    const dur = 750;
     const step = (ts: number) => {
       if (!start) start = ts;
-      const prog = Math.min((ts - start) / dur, 1);
-      const ease = 1 - Math.pow(1 - prog, 3);
+      const prog = Math.min((ts - start) / duration, 1);
+      const ease = prog === 1 ? 1 : 1 - Math.pow(2, -10 * prog);
       setDisp(Math.round(from + (to - from) * ease));
       if (prog < 1) requestAnimationFrame(step);
     };
     const req = requestAnimationFrame(step);
     return () => cancelAnimationFrame(req);
-  }, [value, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <>{format(reduced ? value : disp)}</>;
+  }, [started, value, duration, reduced]);
+
+  const fmt = format ?? ((n: number) => n.toLocaleString());
+  return (
+    <span ref={ref} className="tabular-nums">
+      {fmt(reduced || !started ? value : disp)}
+    </span>
+  );
+}
+
+function Crown({ className = "" }: { className?: string }) {
+  return (
+    <svg className={cn("f-crown pointer-events-none text-gold drop-shadow-md", className)} viewBox="0 0 44 36" fill="currentColor" aria-hidden="true">
+      <path d="M4 30 2 10l10 9L22 3l10 16 10-9-2 20Z" />
+      <rect x="4" y="31" width="36" height="4" rx="2" />
+    </svg>
+  );
 }
 
 function Track({ children, dur = 30 }: { children: ReactNode; dur?: number }) {
@@ -221,7 +274,7 @@ function Track({ children, dur = 30 }: { children: ReactNode; dur?: number }) {
 function InView({ children, className, threshold = 0.15 }: { children: ReactNode; className?: string; threshold?: number }) {
   const [ref, seen] = useReveal<HTMLDivElement>(threshold);
   return (
-    <div ref={ref} data-in={seen} className={cn("group/iv", className)}>
+    <div ref={ref} data-in={seen} className={cn("group/iv", seen && "in", className)}>
       {children}
     </div>
   );
@@ -285,9 +338,18 @@ function Pill({ children, tone = "mute", className }: { children: ReactNode; ton
   );
 }
 
-function Card({ children, className, spot }: { children: ReactNode; className?: string; spot?: boolean }) {
+function onSpotlightMove(e: React.PointerEvent<HTMLElement>) {
+  const rect = e.currentTarget.getBoundingClientRect();
+  e.currentTarget.style.setProperty("--mx", `${e.clientX - rect.left}px`);
+  e.currentTarget.style.setProperty("--my", `${e.clientY - rect.top}px`);
+}
+
+function Card({ children, className, spot = true }: { children: ReactNode; className?: string; spot?: boolean }) {
   return (
-    <div className={cn("relative overflow-hidden rounded-2xl border border-hairline bg-card p-6 text-ink", SHADOW, spot && "hover:border-accent/40 transition-colors", className)}>
+    <div
+      onPointerMove={spot ? onSpotlightMove : undefined}
+      className={cn("f-spot relative overflow-hidden rounded-2xl border border-hairline bg-card p-6 text-ink transition-colors", SHADOW, spot && "hover:border-accent/40", className)}
+    >
       {children}
     </div>
   );
@@ -315,13 +377,15 @@ function SectionHead({
   center?: boolean;
 }) {
   return (
-    <div className={cn("mb-8 md:mb-12", center && "text-center")}>
-      {eyebrow && <p className="text-label uppercase text-accent mb-2">{eyebrow}</p>}
-      <h2 id={id ? `${id}-head` : undefined} className="text-title text-ink font-bold tracking-tight">
-        {title}
-      </h2>
-      {sub && <p className={cn("mt-3 max-w-[640px] text-body text-mute", center && "mx-auto")}>{sub}</p>}
-    </div>
+    <Reveal variant="up">
+      <div className={cn("mb-8 md:mb-12", center && "text-center")}>
+        {eyebrow && <p className="text-label uppercase text-accent mb-2">{eyebrow}</p>}
+        <h2 id={id ? `${id}-head` : undefined} className="text-title text-ink font-bold tracking-tight">
+          {title}
+        </h2>
+        {sub && <p className={cn("mt-3 max-w-[640px] text-body text-mute", center && "mx-auto")}>{sub}</p>}
+      </div>
+    </Reveal>
   );
 }
 
@@ -427,15 +491,15 @@ function ThemeToggle({ mode, onToggle }: { mode: "light" | "dark"; onToggle: () 
       type="button"
       onClick={onToggle}
       aria-label={`Switch to ${mode === "dark" ? "light" : "dark"} mode`}
-      className="grid size-11 place-items-center rounded-full text-mute transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="group grid size-11 place-items-center rounded-full text-mute transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:scale-90"
     >
       {mode === "dark" ? (
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="transition-transform duration-500 ease-out group-hover:rotate-90 motion-reduce:transform-none" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="4" />
           <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
         </svg>
       ) : (
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="transition-transform duration-500 ease-out group-hover:-rotate-45 motion-reduce:transform-none" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
         </svg>
       )}
@@ -519,7 +583,7 @@ function AreaChart({
           </text>
         ))}
         <path d={area} fill={`url(#${gid})`} />
-        <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" pathLength="1" className="fg-draw" />
         {hover !== null && pts[hover] && (
           <g>
             <line x1={pts[hover].x} x2={pts[hover].x} y1={pad.t} y2={pad.t + ih} stroke="var(--accent)" strokeDasharray="2 3" strokeWidth="1.5" />
@@ -551,7 +615,7 @@ function Sparkline({ values }: { values: number[] }) {
   const up = values[values.length - 1] >= values[0];
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden="true" className="block overflow-visible">
-      <path d={smoothPath(pts)} fill="none" stroke={up ? "var(--up)" : "var(--down)"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={smoothPath(pts)} fill="none" stroke={up ? "var(--up)" : "var(--down)"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" pathLength="1" className="fg-draw" />
     </svg>
   );
 }
@@ -1026,7 +1090,7 @@ const STATUS_LABEL: Record<ContestStatus, { pill: string; badge: string }> = {
   winners_declared: { pill: "Winners declared", badge: "Championship complete" },
 };
 
-function Hero({ d, brand, subtitle }: { d: Landing; brand: { name: string; tagline: string }; subtitle: string }) {
+function Hero({ d, brand: _brand, subtitle }: { d: Landing; brand: { name: string; tagline: string }; subtitle: string }) {
   const f = useFmt();
   const c = d.competition.data;
   const status = c?.status ?? "active";
@@ -1034,56 +1098,68 @@ function Hero({ d, brand, subtitle }: { d: Landing; brand: { name: string; tagli
 
   return (
     <section className="relative overflow-hidden pt-12 pb-16 md:pt-20 md:pb-24">
+      {/* Background Animated Mesh Blobs & Grid */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+        <div className="f-blob a" />
+        <div className="f-blob b" />
+        <div className="f-blob c" />
+        <div className="fg-grid absolute inset-0 opacity-40 [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]" />
+      </div>
+
       <div className={WRAP}>
         <div className="grid gap-12 lg:grid-cols-[1.2fr_1fr] lg:items-center">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-accent/25 bg-accent/10 px-3.5 py-1 text-meta font-medium text-accent mb-6">
-              <LiveDot on={status === "active"} />
-              {st.badge}
-            </div>
-
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-ink leading-[1.1]">
-              Trade smart. <span className={GRAD_TEXT}>Climb the Board!</span>
-            </h1>
-
-            <p className="mt-5 text-lg text-mute max-w-xl leading-relaxed">
-              {subtitle}
-            </p>
-
-            <div className="mt-8 flex flex-wrap items-center gap-4">
-              <RankCta size="hero" />
-              <Button variant="ghost" size="lg" href="#leaderboard">
-                View leaderboard
-              </Button>
-            </div>
-
-            {d.stats.data && (
-              <div className="mt-10 grid grid-cols-3 gap-4 border-t border-hairline pt-6 max-w-lg">
-                <div>
-                  <div className="text-xl sm:text-2xl font-bold text-ink">
-                    <CountUp value={d.stats.data.prizeFund} format={f.money} />
-                  </div>
-                  <div className="text-xs text-mute mt-0.5">Prize Fund (USD)</div>
-                </div>
-                <div>
-                  <div className="text-xl sm:text-2xl font-bold text-ink">
-                    <CountUp value={d.stats.data.activeTraders} format={f.num} />
-                  </div>
-                  <div className="text-xs text-mute mt-0.5">Active Traders</div>
-                </div>
-                <div>
-                  <div className="text-xl sm:text-2xl font-bold text-ink text-up">
-                    +{d.stats.data.avgReturnPct}%
-                  </div>
-                  <div className="text-xs text-mute mt-0.5">Average Return</div>
-                </div>
+          <Reveal variant="up">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-accent/25 bg-accent/10 px-3.5 py-1 text-meta font-medium text-accent mb-6 shadow-xs">
+                <LiveDot on={status === "active"} />
+                {st.badge}
               </div>
-            )}
-          </div>
+
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-ink leading-[1.1]">
+                Trade smart. <span className={GRAD_TEXT}>Climb the Board!</span>
+              </h1>
+
+              <p className="mt-5 text-lg text-mute max-w-xl leading-relaxed">
+                {subtitle}
+              </p>
+
+              <div className="mt-8 flex flex-wrap items-center gap-4">
+                <RankCta size="hero" />
+                <Button variant="ghost" size="lg" href="#leaderboard">
+                  View leaderboard
+                </Button>
+              </div>
+
+              {d.stats.data && (
+                <div className="mt-10 grid grid-cols-3 gap-4 border-t border-hairline pt-6 max-w-lg">
+                  <div>
+                    <div className="text-xl sm:text-2xl font-bold text-ink">
+                      <CountUp value={d.stats.data.prizeFund} format={f.money} />
+                    </div>
+                    <div className="text-xs text-mute mt-0.5">Prize Fund (USD)</div>
+                  </div>
+                  <div>
+                    <div className="text-xl sm:text-2xl font-bold text-ink">
+                      <CountUp value={d.stats.data.activeTraders} format={f.num} />
+                    </div>
+                    <div className="text-xs text-mute mt-0.5">Active Traders</div>
+                  </div>
+                  <div>
+                    <div className="text-xl sm:text-2xl font-bold text-ink text-up">
+                      +{d.stats.data.avgReturnPct}%
+                    </div>
+                    <div className="text-xs text-mute mt-0.5">Average Return</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Reveal>
 
           {/* Top 3 Podium Card */}
           <div className="lg:pl-6">
-            <Top3Card d={d} />
+            <Reveal variant="scale" delay={150}>
+              <Top3Card d={d} />
+            </Reveal>
           </div>
         </div>
       </div>
@@ -1098,40 +1174,85 @@ function Top3Card({ d }: { d: Landing }) {
   const board = d.board.data && d.board.data.key.startsWith("overall") ? d.board.data.top3 : null;
   const rows = board && board.length >= 3 ? board.slice(0, 3) : d.winners.data?.winners.slice(0, 3) ?? null;
 
-  return (
-    <div className={cn("relative overflow-clip rounded-2xl border border-hairline bg-card/70 p-6 backdrop-blur-xl shadow-xl", SHADOW)}>
-      <div className="mb-4 flex items-center justify-between">
-        <span className="inline-flex items-center gap-2 text-label uppercase text-mute font-semibold">
-          <Icon name="trophy" size={14} className="text-accent" />
-          {declared ? "Championship Winners" : "Current Board Leaders"}
-        </span>
-        <LiveDot on={!declared} />
-      </div>
+  // Podium order: [Rank 2, Rank 1, Rank 3]
+  const podiumOrder = rows && rows.length >= 3 ? [rows[1], rows[0], rows[2]] : null;
 
-      <div className="flex flex-col gap-2">
-        {rows
-          ? rows.map((r, i) => (
-              <div key={r.rank} className="flex h-14 items-center gap-3 rounded-xl px-3 transition hover:bg-accent/10">
-                <span className={cn("grid size-7 shrink-0 place-items-center rounded-full text-meta font-bold", i === 0 ? "bg-amber-400 text-amber-950" : i === 1 ? "bg-zinc-300 text-zinc-900" : "bg-amber-700 text-white")}>
-                  {r.rank}
-                </span>
-                <Avatar name={r.name} src={r.avatarUrl} size={36} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-cell font-semibold text-ink flex items-center gap-1.5">
-                    {r.name}
-                    <Flag code={r.countryCode} size={13} />
+  return (
+    <InView className="w-full">
+      <div className={cn("f-spot relative overflow-clip rounded-2xl border border-hairline bg-card/85 p-6 backdrop-blur-xl shadow-xl", SHADOW)}>
+        <div className="mb-4 flex items-center justify-between">
+          <span className="inline-flex items-center gap-2 text-label uppercase text-mute font-semibold">
+            <Icon name="trophy" size={14} className="text-accent" />
+            {declared ? "Championship Winners" : "Current Board Leaders"}
+          </span>
+          <LiveDot on={!declared} />
+        </div>
+
+        {podiumOrder ? (
+          <div className="mt-8 flex items-end justify-center gap-2.5 sm:gap-4 pt-4">
+            {podiumOrder.map((r) => {
+              const isChamp = r.rank === 1;
+              const isRank2 = r.rank === 2;
+              const pedHeight = isChamp ? "h-32" : isRank2 ? "h-24" : "h-16";
+              const delay = isChamp ? "350ms" : isRank2 ? "100ms" : "600ms";
+
+              return (
+                <div key={r.rank} className={cn("flex flex-1 flex-col items-center text-center", isChamp && "relative z-10")}>
+                  {/* Avatar & Crown/Spotlight */}
+                  <div className="relative mb-2 flex flex-col items-center">
+                    {isChamp && (
+                      <>
+                        <div className="f-spotlight absolute -top-12 -left-12 -right-12 -bottom-12 rounded-full bg-accent/25 blur-xl pointer-events-none" aria-hidden="true" />
+                        <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-20">
+                          <Crown />
+                        </div>
+                      </>
+                    )}
+                    <div
+                      className={cn(
+                        "relative rounded-full ring-2 transition-transform hover:scale-105",
+                        isChamp ? "ring-gold shadow-lg" : isRank2 ? "ring-silver shadow-md" : "ring-bronze shadow-md"
+                      )}
+                    >
+                      <Avatar name={r.name} src={r.avatarUrl} size={isChamp ? 56 : 46} />
+                      {isChamp && <div className="f-shine" aria-hidden="true" />}
+                    </div>
                   </div>
-                  <div className="text-[11px] text-faint">{(r as LeaderboardEntry).topInstrument ?? "Forex"}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-cell font-bold tabular-nums text-up">
-                    +{f.money(r.netProfit)}
+
+                  {/* Name & Flag */}
+                  <div className="mt-1 flex items-center gap-1 font-semibold text-ink text-xs truncate max-w-[90px] sm:max-w-[110px]">
+                    <span className="truncate">{r.name}</span>
+                    <Flag code={r.countryCode} size={11} />
                   </div>
-                  <div className="text-[10px] text-mute uppercase">Net Profit</div>
+
+                  {/* Net Profit CountUp */}
+                  <div className="text-xs font-bold text-up tabular-nums mt-0.5">
+                    +<CountUp value={r.netProfit} format={f.money} />
+                  </div>
+
+                  {/* Rising Pedestal */}
+                  <div
+                    className={cn(
+                      "f-ped mt-3 w-full rounded-t-2xl flex flex-col items-center justify-start pt-2.5 border border-b-0 shadow-inner",
+                      pedHeight,
+                      isChamp
+                        ? "border-gold/40 bg-linear-to-b from-gold/25 via-gold/10 to-card text-gold"
+                        : isRank2
+                        ? "border-silver/40 bg-linear-to-b from-silver/25 via-silver/10 to-card text-silver"
+                        : "border-bronze/40 bg-linear-to-b from-bronze/25 via-bronze/10 to-card text-bronze"
+                    )}
+                    style={{ "--pd": delay } as CSSProperties}
+                    aria-hidden="true"
+                  >
+                    <b className="text-2xl sm:text-3xl font-black">{r.rank}</b>
+                  </div>
                 </div>
-              </div>
-            ))
-          : [0, 1, 2].map((i) => (
+              );
+            })}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {[0, 1, 2].map((i) => (
               <div key={i} className="flex h-14 items-center gap-3 px-3">
                 <Sk w={28} h={28} className="rounded-full" />
                 <Sk w={36} h={36} className="rounded-full" />
@@ -1139,12 +1260,17 @@ function Top3Card({ d }: { d: Landing }) {
                 <Sk w={64} h={16} />
               </div>
             ))}
-      </div>
+          </div>
+        )}
 
-      <a href="#leaderboard" className="mt-4 inline-flex h-10 items-center gap-2 text-cell font-semibold text-accent transition hover:gap-3">
-        View full leaderboard <Icon name="arrow" size={16} />
-      </a>
-    </div>
+        <div className="mt-4 pt-3 border-t border-hairline flex items-center justify-between">
+          <a href="#leaderboard" className="inline-flex h-10 items-center gap-2 text-cell font-semibold text-accent transition hover:gap-3">
+            View full leaderboard <Icon name="arrow" size={16} />
+          </a>
+          <span className="text-[11px] text-faint">Live standings</span>
+        </div>
+      </div>
+    </InView>
   );
 }
 
@@ -1424,29 +1550,30 @@ function LeaderboardSection({ d }: { d: Landing }) {
                   </td>
                 </tr>
               ) : (
-                entries.map((e) => {
+                entries.map((e, i) => {
                   const isYou = user?.id === e.userId;
                   return (
                     <tr
                       key={e.rank}
                       className={cn(
-                        "hover:bg-accent/5 transition-colors",
+                        "row-st group f-wash hover:bg-accent/5 transition-colors",
                         e.inWinningZone && "bg-accent/[0.02]",
                         isYou && "bg-accent/10 font-medium"
                       )}
+                      style={{ animationDelay: `${Math.min(i, 20) * 45}ms` }}
                     >
                       <td className="py-3 px-4 text-center">
                         <span
                           className={cn(
-                            "inline-grid size-7 place-items-center rounded-full text-xs font-bold",
+                            "inline-grid size-7 place-items-center rounded-full text-xs font-bold transition-transform duration-200 group-hover:scale-110",
                             e.rank === 1
-                              ? "bg-amber-400 text-amber-950"
+                              ? "bg-amber-400 text-amber-950 shadow-xs"
                               : e.rank === 2
-                              ? "bg-zinc-300 text-zinc-900"
+                              ? "bg-zinc-300 text-zinc-900 shadow-xs"
                               : e.rank === 3
-                              ? "bg-amber-700 text-white"
+                              ? "bg-amber-700 text-white shadow-xs"
                               : e.inWinningZone
-                              ? "bg-accent/10 text-accent"
+                              ? "bg-accent/10 text-accent font-semibold"
                               : "text-mute"
                           )}
                         >
@@ -1683,32 +1810,34 @@ function PrizesSection({ d }: { d: Landing }) {
       >
         {(tiers) => (
           <div className="grid gap-6 md:grid-cols-3">
-            {tiers.map((t) => {
+            {tiers.map((t, idx) => {
               const grand = t.id === "grand";
               return (
-                <Card key={t.id} spot className={cn("flex flex-col justify-between", grand && "border-accent ring-1 ring-accent")}>
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-accent/10 text-accent">
-                        {t.ranksFrom === t.ranksTo ? `Rank #${t.ranksFrom}` : `Ranks #${t.ranksFrom} – #${t.ranksTo}`}
-                      </span>
-                      <span className="text-xs text-mute font-mono">{t.winnersCount} {t.winnersCount === 1 ? "winner" : "winners"}</span>
-                    </div>
-                    <h3 className="text-lg font-bold text-ink">{t.label}</h3>
-                    <p className="text-2xl font-extrabold text-up font-mono mt-1">{t.reward}</p>
+                <Reveal key={t.id} variant="up" delay={idx * 80}>
+                  <Card spot className={cn("flex flex-col justify-between h-full", grand && "border-accent ring-1 ring-accent")}>
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-accent/10 text-accent">
+                          {t.ranksFrom === t.ranksTo ? `Rank #${t.ranksFrom}` : `Ranks #${t.ranksFrom} – #${t.ranksTo}`}
+                        </span>
+                        <span className="text-xs text-mute font-mono">{t.winnersCount} {t.winnersCount === 1 ? "winner" : "winners"}</span>
+                      </div>
+                      <h3 className="text-lg font-bold text-ink">{t.label}</h3>
+                      <p className="text-2xl font-extrabold text-up font-mono mt-1">{t.reward}</p>
 
-                    {t.perks && t.perks.length > 0 && (
-                      <ul className="mt-4 space-y-2 border-t border-hairline pt-3">
-                        {t.perks.map((p, pIdx) => (
-                          <li key={pIdx} className="text-xs text-mute flex items-center gap-2">
-                            <span className="text-accent font-bold">✓</span>
-                            <span>{p}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </Card>
+                      {t.perks && t.perks.length > 0 && (
+                        <ul className="mt-4 space-y-2 border-t border-hairline pt-3">
+                          {t.perks.map((p, pIdx) => (
+                            <li key={pIdx} className="text-xs text-mute flex items-center gap-2">
+                              <span className="text-accent font-bold">✓</span>
+                              <span>{p}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </Card>
+                </Reveal>
               );
             })}
           </div>
@@ -1741,13 +1870,15 @@ function HowSection({ d }: { d: Landing }) {
           <div className="space-y-12">
             <div className="grid gap-6 md:grid-cols-3">
               {c.steps.map((s, idx) => (
-                <Card key={idx} className="relative p-6">
-                  <span className="text-4xl font-extrabold text-accent/20 block mb-2 font-mono">
-                    0{idx + 1}
-                  </span>
-                  <h3 className="text-base font-bold text-ink mb-2">{s.title}</h3>
-                  <p className="text-xs text-mute leading-relaxed">{s.body}</p>
-                </Card>
+                <Reveal key={idx} variant="up" delay={idx * 80}>
+                  <Card className="relative p-6 h-full">
+                    <span className="text-4xl font-extrabold text-accent/20 block mb-2 font-mono">
+                      0{idx + 1}
+                    </span>
+                    <h3 className="text-base font-bold text-ink mb-2">{s.title}</h3>
+                    <p className="text-xs text-mute leading-relaxed">{s.body}</p>
+                  </Card>
+                </Reveal>
               ))}
             </div>
 
@@ -1756,10 +1887,12 @@ function HowSection({ d }: { d: Landing }) {
               <h3 className="text-lg font-bold text-ink mb-4 text-center">Championship Rules & Eligibility</h3>
               <div className="grid gap-3 sm:grid-cols-2 max-w-4xl mx-auto">
                 {c.rules.map((rule, idx) => (
-                  <div key={idx} className="flex items-start gap-2.5 p-3 rounded-xl bg-alt border border-hairline text-xs text-mute">
-                    <span className="text-accent font-bold">●</span>
-                    <span>{rule}</span>
-                  </div>
+                  <Reveal key={idx} variant="fade" delay={idx * 30}>
+                    <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-alt border border-hairline text-xs text-mute h-full">
+                      <span className="text-accent font-bold">●</span>
+                      <span>{rule}</span>
+                    </div>
+                  </Reveal>
                 ))}
               </div>
             </div>
@@ -1790,21 +1923,32 @@ function FaqSection({ d }: { d: Landing }) {
             {c.faqs.map((q, idx) => {
               const isOpen = open === idx;
               return (
-                <div key={idx} className="rounded-xl border border-hairline bg-card overflow-hidden transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => setOpen(isOpen ? null : idx)}
-                    className="w-full flex items-center justify-between p-4 text-left font-semibold text-sm text-ink hover:text-accent"
-                  >
-                    <span>{q.q}</span>
-                    <span className="text-accent text-lg font-bold">{isOpen ? "−" : "+"}</span>
-                  </button>
-                  {isOpen && (
-                    <div className="px-4 pb-4 text-xs text-mute leading-relaxed border-t border-hairline/60 pt-3">
-                      {q.a}
+                <Reveal key={idx} variant="up" delay={idx * 50}>
+                  <div className="rounded-2xl border border-hairline bg-card overflow-hidden transition hover:border-hairline-strong shadow-xs">
+                    <button
+                      type="button"
+                      onClick={() => setOpen(isOpen ? null : idx)}
+                      className="w-full flex items-center justify-between p-4 sm:p-5 text-left font-semibold text-sm text-ink hover:text-accent transition-colors"
+                    >
+                      <span className="pr-4">{q.q}</span>
+                      <span className="text-accent text-lg font-bold shrink-0 transition-transform duration-200">
+                        {isOpen ? "−" : "+"}
+                      </span>
+                    </button>
+                    <div
+                      className={cn(
+                        "grid transition-all duration-300 ease-out",
+                        isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                      )}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="px-4 sm:px-5 pb-5 text-xs text-mute leading-relaxed border-t border-hairline/60 pt-3">
+                          {q.a}
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                </Reveal>
               );
             })}
           </div>

@@ -48,7 +48,7 @@ function Shell({ titleId, onClose, children }: { titleId: string; onClose: () =>
     };
   }, []);
 
-  // document-level so Esc / Tab still work when focus has fallen back to <body> (e.g. after a step swap)
+  // document-level so Esc / Tab still work when focus has fallen back to <body>
   useEffect(() => {
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -120,6 +120,8 @@ async function postJson<T extends object>(url: string, body: object, method: "PO
     const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const data = (await res.json().catch(() => null)) as (T & { ok?: boolean }) | ApiError | null;
     if (res.ok && data && (data as { ok?: boolean }).ok !== false) return { ...(data as T), ok: true };
+    if (res.status === 401) return { ok: false, error: "unauthorized", message: "Your session expired. Please verify your email again." };
+    if (res.status === 403) return { ok: false, error: "forbidden", message: "Your session expired. Please verify your email again." };
     return data && "error" in data ? (data as ApiError) : { ok: false, error: "server", message: "Something went wrong. Please try again." };
   } catch {
     return { ok: false, error: "network", message: "Network error. Check your connection and try again." };
@@ -127,6 +129,9 @@ async function postJson<T extends object>(url: string, body: object, method: "PO
 }
 const msgFor = (e: ApiError): string => {
   switch (e.error) {
+    case "unauthorized":
+    case "forbidden":
+      return "Your session expired. Please verify your email again.";
     case "rate_limited":
       return e.retryAfter ? `Too many attempts. Try again in ${Math.ceil(e.retryAfter / 60)} min.` : "Too many attempts. Try again later.";
     case "invalid_code":
@@ -143,11 +148,12 @@ const msgFor = (e: ApiError): string => {
 };
 
 /* ─────────────────────────── step 1: email ──────────────────────────────── */
-function EmailStep({ onSent }: { onSent: (email: string) => void }) {
-  const [email, setEmail] = useState("");
+function EmailStep({ initialEmail = "", initialError = "", onSent }: { initialEmail?: string; initialError?: string; onSent: (email: string) => void }) {
+  const [email, setEmail] = useState(initialEmail);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  const [err, setErr] = useState(initialError);
   const errId = useId();
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const v = email.trim().toLowerCase();
@@ -159,6 +165,7 @@ function EmailStep({ onSent }: { onSent: (email: string) => void }) {
     if (r.ok) onSent(v);
     else setErr(msgFor(r));
   };
+
   return (
     <form onSubmit={(e) => void submit(e)} noValidate>
       <p className="text-label uppercase text-accent">FOGM Championship</p>
@@ -173,13 +180,16 @@ function EmailStep({ onSent }: { onSent: (email: string) => void }) {
         autoComplete="email"
         placeholder="you@example.com"
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        onChange={(e) => {
+          setEmail(e.target.value);
+          setErr("");
+        }}
         aria-invalid={!!err}
         aria-describedby={err ? errId : undefined}
         className={FIELD}
       />
       <ErrorLine id={errId}>{err}</ErrorLine>
-      <button type="submit" disabled={busy || email.trim() === ""} className={`${BTN_PRIMARY} mt-5`}>
+      <button type="submit" disabled={busy || email.trim() === ""} aria-busy={busy} className={`${BTN_PRIMARY} mt-5`}>
         {busy && <Spinner />}Send code
       </button>
       <p className="mt-4 text-center text-meta text-faint">By continuing you agree to the championship rules.</p>
@@ -189,7 +199,7 @@ function EmailStep({ onSent }: { onSent: (email: string) => void }) {
 
 /* ─────────────────────────── step 2: OTP ────────────────────────────────── */
 const RESEND_SECONDS = 30;
-function OtpStep({ email, onBack, onVerified }: { email: string; onBack: () => void; onVerified: () => void }) {
+function OtpStep({ email, onBack, onVerified }: { email: string; onBack: () => void; onVerified: () => Promise<string | null> }) {
   const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -197,6 +207,7 @@ function OtpStep({ email, onBack, onVerified }: { email: string; onBack: () => v
   const [resent, setResent] = useState(false);
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const submitting = useRef(false);
+  const errId = useId();
 
   useEffect(() => {
     if (left <= 0) return;
@@ -211,13 +222,21 @@ function OtpStep({ email, onBack, onVerified }: { email: string; onBack: () => v
       setBusy(true);
       setErr("");
       const r = await postJson("/api/auth/verify-otp", { email, code });
+      if (!r.ok) {
+        setBusy(false);
+        submitting.current = false;
+        setErr(msgFor(r));
+        if (r.error === "invalid_code") {
+          setDigits(["", "", "", "", "", ""]);
+          refs.current[0]?.focus();
+        }
+        return;
+      }
+      const verifyErr = await onVerified();
       setBusy(false);
       submitting.current = false;
-      if (r.ok) return onVerified();
-      setErr(msgFor(r));
-      if (r.error === "invalid_code") {
-        setDigits(["", "", "", "", "", ""]);
-        refs.current[0]?.focus();
+      if (verifyErr) {
+        setErr(verifyErr);
       }
     },
     [email, onVerified],
@@ -241,6 +260,7 @@ function OtpStep({ email, onBack, onVerified }: { email: string; onBack: () => v
       const next = [...digits];
       next[i - 1] = "";
       setDigits(next);
+      setErr("");
       refs.current[i - 1]?.focus();
     } else if (e.key === "ArrowLeft" && i > 0) refs.current[i - 1]?.focus();
     else if (e.key === "ArrowRight" && i < 5) refs.current[i + 1]?.focus();
@@ -299,19 +319,19 @@ function OtpStep({ email, onBack, onVerified }: { email: string; onBack: () => v
           />
         ))}
       </div>
-      <ErrorLine>{err}</ErrorLine>
+      <ErrorLine id={errId}>{err}</ErrorLine>
       <div role="status" aria-live="polite" className="mt-3 min-h-5 text-meta text-mute">{resent && !err ? "A new code is on its way." : ""}</div>
-      <button type="submit" disabled={busy || digits.some((d) => !d)} className={`${BTN_PRIMARY} mt-3`}>
+      <button type="submit" disabled={busy || digits.some((d) => !d)} aria-busy={busy} className={`${BTN_PRIMARY} mt-3`}>
         {busy && <Spinner />}Verify
       </button>
       <div className="mt-4 flex items-center justify-between gap-3 text-meta">
-        <button type="button" onClick={onBack} className="inline-flex h-11 items-center rounded-full px-2 font-medium text-mute transition hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        <button type="button" onClick={onBack} disabled={busy} className="inline-flex h-11 items-center rounded-full px-2 font-medium text-mute transition hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
           Change email
         </button>
         <button
           type="button"
           onClick={() => void resend()}
-          disabled={left > 0}
+          disabled={busy || left > 0}
           className="inline-flex h-11 items-center rounded-full px-2 font-semibold text-accent transition disabled:cursor-not-allowed disabled:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {left > 0 ? `Resend in ${left}s` : "Resend code"}
@@ -341,28 +361,42 @@ interface UploadResult {
   error?: { message: string };
 }
 
-function AvatarUploader({ name, value, onChange }: { name: string; value: string | null; onChange: (url: string | null) => void }) {
+function AvatarUploader({
+  name,
+  value,
+  disabled,
+  onUploadingChange,
+  onError,
+  onChange,
+}: {
+  name: string;
+  value: string | null;
+  disabled?: boolean;
+  onUploadingChange: (uploading: boolean) => void;
+  onError: (err: string) => void;
+  onChange: (url: string | null) => void;
+}) {
   const [preview, setPreview] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
-  const [err, setErr] = useState("");
   const input = useRef<HTMLInputElement | null>(null);
-  const errId = useId();
 
   useEffect(() => () => {
     if (preview) URL.revokeObjectURL(preview);
   }, [preview]);
 
   const upload = async (file: File) => {
-    setErr("");
-    if (!TYPES.includes(file.type)) return setErr("Use a JPG, PNG or WebP image.");
-    if (file.size > MAX_BYTES) return setErr("That image is over 2 MB. Choose a smaller one.");
+    onError("");
+    if (!TYPES.includes(file.type)) return onError("Use a JPG, PNG or WebP image.");
+    if (file.size > MAX_BYTES) return onError("That image is over 2 MB. Choose a smaller one.");
     setPreview(URL.createObjectURL(file)); // instant preview
     setProgress(0);
+    onUploadingChange(true);
     const sign = await postJson<Omit<SignPayload, "ok">>("/api/avatar/sign", {});
     if (!sign.ok) {
       setProgress(null);
       setPreview(null);
-      return setErr(msgFor(sign));
+      onUploadingChange(false);
+      return onError(msgFor(sign));
     }
     const s = sign as SignPayload;
     const form = new FormData();
@@ -382,10 +416,12 @@ function AvatarUploader({ name, value, onChange }: { name: string; value: string
     xhr.onerror = () => {
       setProgress(null);
       setPreview(null);
-      setErr("Upload failed. Check your connection and try again.");
+      onUploadingChange(false);
+      onError("Upload failed. Check your connection and try again.");
     };
     xhr.onload = () => {
       setProgress(null);
+      onUploadingChange(false);
       let body: UploadResult = {};
       try {
         body = JSON.parse(xhr.responseText) as UploadResult;
@@ -395,7 +431,7 @@ function AvatarUploader({ name, value, onChange }: { name: string; value: string
       if (xhr.status >= 200 && xhr.status < 300 && body.secure_url) onChange(body.secure_url);
       else {
         setPreview(null);
-        setErr(body.error?.message ?? "Upload failed. Please try another image.");
+        onError(body.error?.message ?? "Upload failed. Please try another image.");
       }
     };
     xhr.send(form);
@@ -414,13 +450,20 @@ function AvatarUploader({ name, value, onChange }: { name: string; value: string
             className="sr-only"
             tabIndex={-1}
             aria-hidden="true"
+            disabled={disabled || uploading}
             onChange={(e) => {
               const f = e.target.files?.[0];
               e.target.value = "";
               if (f) void upload(f);
             }}
           />
-          <button type="button" onClick={() => input.current?.click()} disabled={uploading} aria-describedby={err ? errId : undefined} className={`${BTN_GHOST} !w-auto`}>
+          <button
+            type="button"
+            onClick={() => input.current?.click()}
+            disabled={disabled || uploading}
+            aria-busy={uploading}
+            className={`${BTN_GHOST} !w-auto`}
+          >
             {uploading ? <Spinner /> : null}
             {value || preview ? "Change photo" : "Upload photo"}
           </button>
@@ -432,24 +475,33 @@ function AvatarUploader({ name, value, onChange }: { name: string; value: string
           <div className="h-full rounded-full bg-linear-to-r from-accent to-accent-2 transition-[width] duration-200" style={{ width: `${progress}%` }} />
         </div>
       )}
-      <ErrorLine id={errId}>{err}</ErrorLine>
     </div>
   );
 }
 
 /* ─────────────────────────── step 3: profile ────────────────────────────── */
-function ProfileStep({ photoOnly, onDone }: { photoOnly?: boolean; onDone: () => void }) {
+function ProfileStep({ photoOnly, onSessionExpired, onDone }: { photoOnly?: boolean; onSessionExpired?: (msg: string) => void; onDone: () => void }) {
   const { user, refresh } = useAuth();
   const [name, setName] = useState(user?.name ?? "");
   const [avatar, setAvatar] = useState<string | null>(user?.avatarUrl ?? null);
   const [showName, setShowName] = useState(user?.showName ?? true);
   const [showPhoto, setShowPhoto] = useState(user?.showPhoto ?? true);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState("");
   const errId = useId();
 
+  const handleAvatarError = (msg: string) => {
+    if (msg.includes("session expired") && onSessionExpired) {
+      onSessionExpired(msg);
+      return;
+    }
+    setErr(msg);
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (busy || uploading) return;
     const n = name.trim();
     if (!photoOnly && (n.length < 2 || n.length > 30)) return setErr("Display name must be 2 to 30 characters.");
     setBusy(true);
@@ -458,10 +510,21 @@ function ProfileStep({ photoOnly, onDone }: { photoOnly?: boolean; onDone: () =>
     const r = await postJson("/api/me", body, "PATCH");
     if (!r.ok) {
       setBusy(false);
+      if ((r.error === "unauthorized" || r.error === "forbidden") && onSessionExpired) {
+        onSessionExpired(msgFor(r));
+        return;
+      }
       return setErr(msgFor(r));
     }
-    await refresh();
+    const me = await refresh();
     setBusy(false);
+    if (!me.user) {
+      if (onSessionExpired) {
+        onSessionExpired("Your session expired. Please verify your email again.");
+        return;
+      }
+      return setErr("Failed to verify user session.");
+    }
     onDone();
   };
 
@@ -480,6 +543,7 @@ function ProfileStep({ photoOnly, onDone }: { photoOnly?: boolean; onDone: () =>
             data-autofocus
             autoFocus
             value={name}
+            disabled={busy || uploading}
             onChange={(e) => { setName(e.target.value); setErr(""); }}
             minLength={2}
             maxLength={30}
@@ -491,7 +555,17 @@ function ProfileStep({ photoOnly, onDone }: { photoOnly?: boolean; onDone: () =>
           />
         </div>
       )}
-      <AvatarUploader name={name || user?.name || "You"} value={avatar} onChange={setAvatar} />
+      <AvatarUploader
+        name={name || user?.name || "You"}
+        value={avatar}
+        disabled={busy}
+        onUploadingChange={setUploading}
+        onError={handleAvatarError}
+        onChange={(url) => {
+          setAvatar(url);
+          setErr("");
+        }}
+      />
       {!photoOnly && (
         <div className="mt-5 space-y-3 rounded-2xl border border-hairline bg-alt p-4">
           <div className="flex items-center justify-between gap-3">
@@ -503,7 +577,8 @@ function ProfileStep({ photoOnly, onDone }: { photoOnly?: boolean; onDone: () =>
               type="button"
               role="switch"
               aria-checked={showName}
-              onClick={() => setShowName(!showName)}
+              disabled={busy || uploading}
+              onClick={() => { setShowName(!showName); setErr(""); }}
               className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
                 showName ? "bg-accent" : "bg-hairline-strong"
               }`}
@@ -524,7 +599,8 @@ function ProfileStep({ photoOnly, onDone }: { photoOnly?: boolean; onDone: () =>
               type="button"
               role="switch"
               aria-checked={showPhoto}
-              onClick={() => setShowPhoto(!showPhoto)}
+              disabled={busy || uploading}
+              onClick={() => { setShowPhoto(!showPhoto); setErr(""); }}
               className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
                 showPhoto ? "bg-accent" : "bg-hairline-strong"
               }`}
@@ -539,8 +615,8 @@ function ProfileStep({ photoOnly, onDone }: { photoOnly?: boolean; onDone: () =>
         </div>
       )}
       <ErrorLine id={errId}>{err}</ErrorLine>
-      <button type="submit" disabled={busy} className={`${BTN_PRIMARY} mt-5`}>
-        {busy && <Spinner />}{photoOnly ? "Save photo" : "Finish"}
+      <button type="submit" disabled={busy || uploading} aria-busy={busy || uploading} className={`${BTN_PRIMARY} mt-5`}>
+        {(busy || uploading) && <Spinner />}{photoOnly ? "Save photo" : "Finish"}
       </button>
     </form>
   );
@@ -568,16 +644,29 @@ export default function JoinModal() {
   const { modal, closeModal, user, refresh } = useAuth();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
+  const [authError, setAuthError] = useState("");
 
   // reset whenever the join modal (re)opens
   useEffect(() => {
-    if (modal === "join") setStep("email");
+    if (modal === "join") {
+      setStep("email");
+      setAuthError("");
+    }
   }, [modal]);
 
-  const afterVerify = useCallback(async () => {
+  const afterVerify = useCallback(async (): Promise<string | null> => {
     const me = await refresh();
-    setStep(me.user?.profileComplete ? "success" : "profile");
+    if (!me.user) {
+      return "Unable to retrieve user session. Please try again.";
+    }
+    setStep(me.user.profileComplete ? "success" : "profile");
+    return null;
   }, [refresh]);
+
+  const handleSessionExpired = useCallback((msg: string) => {
+    setAuthError(msg);
+    setStep("email");
+  }, []);
 
   if (!modal) return null;
 
@@ -591,15 +680,36 @@ export default function JoinModal() {
   if (modal === "photo") {
     return (
       <Shell titleId="join-title" onClose={closeModal}>
-        <ProfileStep photoOnly onDone={closeModal} />
+        <ProfileStep photoOnly onSessionExpired={handleSessionExpired} onDone={closeModal} />
       </Shell>
     );
   }
   return (
     <Shell titleId="join-title" onClose={closeModal}>
-      {step === "email" && <EmailStep onSent={(e) => { setEmail(e); setStep("otp"); }} />}
-      {step === "otp" && <OtpStep email={email} onBack={() => setStep("email")} onVerified={() => void afterVerify()} />}
-      {step === "profile" && <ProfileStep onDone={() => setStep("success")} />}
+      {step === "email" && (
+        <EmailStep
+          initialEmail={email}
+          initialError={authError}
+          onSent={(e) => {
+            setEmail(e);
+            setAuthError("");
+            setStep("otp");
+          }}
+        />
+      )}
+      {step === "otp" && (
+        <OtpStep
+          email={email}
+          onBack={() => setStep("email")}
+          onVerified={afterVerify}
+        />
+      )}
+      {step === "profile" && (
+        <ProfileStep
+          onSessionExpired={handleSessionExpired}
+          onDone={() => setStep("success")}
+        />
+      )}
       {step === "success" && <SuccessStep onClose={closeModal} />}
     </Shell>
   );

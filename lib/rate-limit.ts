@@ -22,7 +22,7 @@ export async function hit(key: string, limit: number, windowSeconds: number): Pr
     RateLimit.findOneAndUpdate(
       { key },
       { $inc: { count: 1 }, $setOnInsert: { resetAt } },
-      { upsert: true, returnDocument: true },
+      { upsert: true, new: true },
     );
   let doc;
   try {
@@ -39,6 +39,9 @@ export async function hit(key: string, limit: number, windowSeconds: number): Pr
 /** Best-effort client IP. Only trust x-forwarded-for when you sit behind a proxy you control. */
 export function clientIp(req: Request): string {
   const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
+  if (xff) {
+    const first = xff.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return req.headers.get("x-real-ip")?.trim() ?? "127.0.0.1";
 }

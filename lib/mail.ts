@@ -38,7 +38,7 @@ export async function sendOtpEmail(to: string, code: string): Promise<void> {
   const t = transport();
   if (!t) {
     if (process.env.NODE_ENV === "production") throw new Error("SMTP is not configured");
-    console.log(`[dev mail] OTP for ${to}: ${code}`);
+    // In dev without SMTP, do not log the plain OTP to protect credentials
     return;
   }
   await t.sendMail({

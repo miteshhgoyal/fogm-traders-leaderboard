@@ -65,8 +65,9 @@ export async function getSession(opts?: { slide?: boolean }): Promise<Session | 
       try {
         await dbConnect();
         const user = await User.findById(session.userId).select("status sessionVersion").lean();
-        if (!user || user.status === "disabled") return null;
-        if (user.sessionVersion !== sessionVersion) return null;
+        if (!user) return null;
+        if ((user.status ?? "active") === "disabled") return null;
+        if ((user.sessionVersion ?? 0) !== sessionVersion) return null;
       } catch {
         // DB unavailable: allow session to continue
       }

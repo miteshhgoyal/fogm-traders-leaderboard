@@ -28,7 +28,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   // Count the attempt BEFORE comparing, atomically, so parallel guesses cannot exceed 5.
-  const doc = await OtpCode.findOneAndUpdate({ _id: found._id, attempts: { $lt: MAX_ATTEMPTS } }, { $inc: { attempts: 1 } }, { returnDocument: true });
+  const doc = await OtpCode.findOneAndUpdate({ _id: found._id, attempts: { $lt: MAX_ATTEMPTS } }, { $inc: { attempts: 1 } }, { new: true });
   if (!doc) {
     await OtpCode.deleteOne({ _id: found._id });
     return fail(400, "too_many_attempts");
@@ -50,15 +50,28 @@ export async function POST(req: Request): Promise<Response> {
   const country = req.headers.get("x-vercel-ip-country") ?? req.headers.get("cf-ipcountry");
   const user = await User.findOneAndUpdate(
     { email },
-    { $setOnInsert: { email, name: "", avatarUrl: null, showName: true, showPhoto: true, profileComplete: false, country: country && country !== "XX" ? country : null } },
-    { upsert: true, returnDocument: true },
+    {
+      $setOnInsert: {
+        email,
+        name: "",
+        avatarUrl: null,
+        showName: true,
+        showPhoto: true,
+        profileComplete: false,
+        country: country && country !== "XX" ? country : null,
+        sessionVersion: 0,
+        status: "active",
+        loginCount: 0,
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
   );
   if (!user) return fail(500, "server");
 
   // Update login tracking
   await User.findByIdAndUpdate(user._id, {
-    $inc: { loginCount: 1 },
     $set: { lastLoginAt: new Date() },
+    $inc: { loginCount: 1 },
   });
 
   await createSession({ userId: String(user._id), email: user.email, sessionVersion: user.sessionVersion ?? 0 });

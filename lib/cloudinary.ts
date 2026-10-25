@@ -41,6 +41,31 @@ export function signAvatarUpload(userId: string): SignedUpload {
   };
 }
 
+/** Signed payload for brand asset uploads (logos, icons) by admin. */
+export function signBrandUpload(customPublicId?: string): SignedUpload {
+  const { cloud_name, api_key, api_secret } = config();
+  const timestamp = Math.floor(Date.now() / 1000);
+  const public_id = customPublicId ?? `brand_${timestamp}`;
+  const params = {
+    folder: "fogm/brand",
+    invalidate: "true",
+    overwrite: "true",
+    public_id,
+    timestamp,
+  };
+  const signature = cloudinary.utils.api_sign_request(params, api_secret);
+  return {
+    uploadUrl: `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
+    apiKey: api_key,
+    timestamp,
+    signature,
+    folder: params.folder,
+    publicId: params.public_id,
+    overwrite: params.overwrite,
+    invalidate: params.invalidate,
+  };
+}
+
 /** Only this user's own Cloudinary upload may be stored as their avatar. */
 export function isAllowedAvatarUrl(raw: string, userId: string): boolean {
   const cloud = process.env.CLOUDINARY_CLOUD_NAME;

@@ -58,5 +58,10 @@ export async function requireAdmin(): Promise<{ email: string }> {
 }
 
 export function adminClientIp(req: Request): string {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    const first = xff.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return req.headers.get("x-real-ip")?.trim() ?? "127.0.0.1";
 }

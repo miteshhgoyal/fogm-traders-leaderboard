@@ -47,12 +47,12 @@ async function recordFailure(ip: string): Promise<void> {
     RateLimit.findOneAndUpdate(
       { key: `admin_login:15m:${ip}` },
       { $inc: { count: 1 }, $setOnInsert: { resetAt: reset15m } },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: true }
     ),
     RateLimit.findOneAndUpdate(
       { key: `admin_login:1d:${ip}` },
       { $inc: { count: 1 }, $setOnInsert: { resetAt: reset1d } },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: true }
     ),
   ]);
 }

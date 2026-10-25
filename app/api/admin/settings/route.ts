@@ -40,7 +40,7 @@ export async function PATCH(req: Request): Promise<Response> {
   const updated = await SiteSettings.findOneAndUpdate(
     { key: "main" },
     { $set: { ...safe, updatedAt: new Date() } },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: true }
   );
   
   await logAudit({ actor: admin.email, action: "update_settings", target: "settings:main", before, after: safe, ip: adminClientIp(req) });

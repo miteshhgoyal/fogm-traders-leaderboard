@@ -22,7 +22,7 @@ export async function hit(key: string, limit: number, windowSeconds: number): Pr
     RateLimit.findOneAndUpdate(
       { key },
       { $inc: { count: 1 }, $setOnInsert: { resetAt } },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: true },
     );
   let doc;
   try {

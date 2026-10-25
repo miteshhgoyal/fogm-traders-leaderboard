@@ -66,7 +66,7 @@ export async function PATCH(req: Request): Promise<Response> {
   if (showPhoto !== undefined) set.showPhoto = showPhoto;
   if (country !== undefined) set.country = country;
 
-  const updated = await User.findByIdAndUpdate(session.userId, { $set: set }, { new: true });
+  const updated = await User.findByIdAndUpdate(session.userId, { $set: set }, { returnDocument: true });
   if (!updated) return fail(404, "not_found");
   if (!updated.profileComplete && updated.name.trim().length >= 2) {
     updated.profileComplete = true;

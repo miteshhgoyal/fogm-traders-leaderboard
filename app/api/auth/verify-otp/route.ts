@@ -28,7 +28,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   // Count the attempt BEFORE comparing, atomically, so parallel guesses cannot exceed 5.
-  const doc = await OtpCode.findOneAndUpdate({ _id: found._id, attempts: { $lt: MAX_ATTEMPTS } }, { $inc: { attempts: 1 } }, { new: true });
+  const doc = await OtpCode.findOneAndUpdate({ _id: found._id, attempts: { $lt: MAX_ATTEMPTS } }, { $inc: { attempts: 1 } }, { returnDocument: true });
   if (!doc) {
     await OtpCode.deleteOne({ _id: found._id });
     return fail(400, "too_many_attempts");
@@ -51,7 +51,7 @@ export async function POST(req: Request): Promise<Response> {
   const user = await User.findOneAndUpdate(
     { email },
     { $setOnInsert: { email, name: "", avatarUrl: null, showName: true, showPhoto: true, profileComplete: false, country: country && country !== "XX" ? country : null } },
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: true },
   );
   if (!user) return fail(500, "server");
 

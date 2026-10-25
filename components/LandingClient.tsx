@@ -183,6 +183,7 @@ function Reveal({
   return (
     <div
       ref={ref}
+      data-in={seen}
       style={{ transitionDelay: `${delay}ms` }}
       className={cn(
         "transition-all duration-700 ease-soft motion-reduce:transform-none motion-reduce:opacity-100 motion-reduce:transition-none",
@@ -284,7 +285,7 @@ function InView({ children, className, threshold = 0.15 }: { children: ReactNode
 const WRAP = "mx-auto w-full max-w-[1280px] px-5 sm:px-8";
 const SHADOW = "shadow-[var(--shadow)]";
 const GRAD_TEXT = "bg-linear-to-br from-accent to-accent-2 bg-clip-text text-transparent";
-const ST = "opacity-0 group-data-[in=true]/iv:animate-[f-fadeup_.5s_var(--ease)_both] motion-reduce:opacity-100 motion-reduce:animate-none";
+const ST = "opacity-0 [animation-delay:calc(var(--i,0)*60ms)] group-data-[in=true]/iv:animate-[f-fadeup_.5s_var(--ease)_both] motion-reduce:opacity-100 motion-reduce:animate-none";
 
 function Button({
   children,
@@ -344,9 +345,10 @@ function onSpotlightMove(e: React.PointerEvent<HTMLElement>) {
   e.currentTarget.style.setProperty("--my", `${e.clientY - rect.top}px`);
 }
 
-function Card({ children, className, spot = true }: { children: ReactNode; className?: string; spot?: boolean }) {
+function Card({ children, className, spot = true, style }: { children: ReactNode; className?: string; spot?: boolean; style?: CSSProperties }) {
   return (
     <div
+      style={style}
       onPointerMove={spot ? onSpotlightMove : undefined}
       className={cn("f-spot relative overflow-hidden rounded-2xl border border-hairline bg-card p-6 text-ink transition-colors", SHADOW, spot && "hover:border-accent/40", className)}
     >
@@ -360,6 +362,25 @@ function Section({ id, children, alt, className }: { id: string; children: React
     <section id={id} className={cn("scroll-mt-24 py-16 md:py-24", alt && "bg-alt border-y border-hairline", className)}>
       <div className={WRAP}>{children}</div>
     </section>
+  );
+}
+
+/** Per-word mask reveal; runs when an ancestor gets data-in="true" (Reveal / InView). */
+function Words({ text, accent = 0 }: { text: string; accent?: number }) {
+  const ws = text.split(" ");
+  const from = accent > 0 ? Math.max(0, ws.length - accent) : ws.length;
+  return (
+    <>
+      <span className="sr-only">{text}</span>
+      <span aria-hidden="true">
+        {ws.map((w, i) => (
+          <span key={i} className="fg-vw inline-block overflow-hidden pb-1 align-top">
+            <span className={i >= from ? GRAD_TEXT : undefined} style={{ "--w": i } as CSSProperties}>{w}</span>
+            {i < ws.length - 1 ? "\u00a0" : ""}
+          </span>
+        ))}
+      </span>
+    </>
   );
 }
 
@@ -381,7 +402,7 @@ function SectionHead({
       <div className={cn("mb-8 md:mb-12", center && "text-center")}>
         {eyebrow && <p className="text-label uppercase text-accent mb-2">{eyebrow}</p>}
         <h2 id={id ? `${id}-head` : undefined} className="text-title text-ink font-bold tracking-tight">
-          {title}
+          <Words text={title} accent={title.split(" ").length >= 3 ? 2 : 1} />
         </h2>
         {sub && <p className={cn("mt-3 max-w-[640px] text-body text-mute", center && "mx-auto")}>{sub}</p>}
       </div>
@@ -545,6 +566,7 @@ function AreaChart({
   ariaLabel: string;
 }) {
   const gid = useId();
+  const [revealRef, seen] = useReveal<HTMLDivElement>(0.2);
   const [hover, setHover] = useState<number | null>(null);
   const pad = { l: 52, r: 12, t: 12, b: 28 };
   const w = 560;
@@ -561,7 +583,7 @@ function AreaChart({
   const xi = [0, Math.floor((labels.length - 1) / 2), labels.length - 1];
 
   return (
-    <div className="relative w-full overflow-hidden" onPointerLeave={() => setHover(null)}>
+    <div ref={revealRef} data-in={seen} className="relative w-full overflow-hidden" onPointerLeave={() => setHover(null)}>
       <svg viewBox={`0 0 ${w} ${height}`} role="img" aria-label={ariaLabel} className="w-full h-auto block overflow-visible">
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
@@ -582,8 +604,9 @@ function AreaChart({
             {labels[i]}
           </text>
         ))}
-        <path d={area} fill={`url(#${gid})`} />
+        <path d={area} fill={`url(#${gid})`} className="fg-fade" />
         <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" pathLength="1" className="fg-draw" />
+        {pts.length > 0 && <circle className="fg-pop" style={{ "--k": 9 } as CSSProperties} cx={pts[pts.length - 1].x} cy={pts[pts.length - 1].y} r="4" fill="var(--card)" stroke="var(--accent)" strokeWidth="2.5" />}
         {hover !== null && pts[hover] && (
           <g>
             <line x1={pts[hover].x} x2={pts[hover].x} y1={pad.t} y2={pad.t + ih} stroke="var(--accent)" strokeDasharray="2 3" strokeWidth="1.5" />
@@ -613,10 +636,15 @@ function Sparkline({ values }: { values: number[] }) {
     y: H - 2.5 - ((v - min) / span) * (H - 5),
   }));
   const up = values[values.length - 1] >= values[0];
+  const [ref, seen] = useReveal<HTMLSpanElement>(0.3);
+  const last = pts[pts.length - 1];
   return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden="true" className="block overflow-visible">
-      <path d={smoothPath(pts)} fill="none" stroke={up ? "var(--up)" : "var(--down)"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" pathLength="1" className="fg-draw" />
-    </svg>
+    <span ref={ref} data-in={seen} className="block">
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden="true" className="block overflow-visible">
+        <path d={smoothPath(pts)} fill="none" stroke={up ? "var(--up)" : "var(--down)"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" pathLength="1" className="fg-draw" />
+        {last && <circle className="fg-pop" style={{ "--k": 8 } as CSSProperties} cx={last.x} cy={last.y} r="2.2" fill={up ? "var(--up)" : "var(--down)"} />}
+      </svg>
+    </span>
   );
 }
 
@@ -1090,7 +1118,7 @@ const STATUS_LABEL: Record<ContestStatus, { pill: string; badge: string }> = {
   winners_declared: { pill: "Winners declared", badge: "Championship complete" },
 };
 
-function Hero({ d, brand: _brand, subtitle }: { d: Landing; brand: { name: string; tagline: string }; subtitle: string }) {
+function Hero({ d, subtitle }: { d: Landing; brand?: { name: string; tagline: string }; subtitle: string }) {
   const f = useFmt();
   const c = d.competition.data;
   const status = c?.status ?? "active";
@@ -1116,7 +1144,17 @@ function Hero({ d, brand: _brand, subtitle }: { d: Landing; brand: { name: strin
               </div>
 
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-ink leading-[1.1]">
-                Trade smart. <span className={GRAD_TEXT}>Climb the Board!</span>
+                <span className="sr-only">Trade smart. Climb the Board!</span>
+                <span aria-hidden="true">
+                  {["Trade", "smart.", "Climb", "the", "Board!"].map((w, i) => (
+                    <span key={i} className="fg-word inline-block overflow-hidden pb-1 align-top">
+                      <span className={i >= 2 ? GRAD_TEXT : undefined} style={{ "--w": i } as CSSProperties}>
+                        {w}
+                      </span>
+                      {i < 4 ? "\u00a0" : ""}
+                    </span>
+                  ))}
+                </span>
               </h1>
 
               <p className="mt-5 text-lg text-mute max-w-xl leading-relaxed">
@@ -1393,24 +1431,24 @@ function ContestOverviewSection({ d }: { d: Landing }) {
               isEmpty={(s) => s.length === 0}
             >
               {(items) => (
-                <div className="grid gap-4">
+                <InView className="grid gap-4">
                   {items.map((item, idx) => (
                     <div key={item.instrumentClass || idx}>
                       <div className="flex items-baseline justify-between text-cell">
                         <span className="font-medium text-ink">{item.instrumentClass}</span>
                         <span className="text-meta text-mute">
-                          {f.num(item.volumeLots)} lots · {item.sharePct}%
+                          <CountUp value={item.volumeLots} format={f.num} /> lots · <CountUp value={item.sharePct} format={(n) => `${Math.round(n)}%`} />
                         </span>
                       </div>
                       <div className="mt-2 h-2 overflow-hidden rounded-full bg-ink/10">
                         <div
-                          className="h-full rounded-full bg-linear-to-r from-accent to-accent-2 transition-all duration-700"
-                          style={{ width: `${item.sharePct}%` }}
+                          className="fg-bar h-full rounded-full bg-linear-to-r from-accent to-accent-2"
+                          style={{ "--p": item.sharePct / 100, animationDelay: `${idx * 110 + 150}ms` } as CSSProperties}
                         />
                       </div>
                     </div>
                   ))}
-                </div>
+                </InView>
               )}
             </Async>
           </Card>
@@ -1418,40 +1456,40 @@ function ContestOverviewSection({ d }: { d: Landing }) {
       </div>
 
       {/* 6 Stat Tiles (Zero pool/progress bar) */}
-      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <InView className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {d.stats.data ? (
           <>
-            <Card className="p-4 text-center">
+            <Card className={cn("p-4 text-center", ST)} style={{ "--i": 0 } as CSSProperties}>
               <span className="text-xs text-mute block">Prize Fund</span>
               <span className="text-lg font-bold text-ink mt-1 block">
                 <CountUp value={d.stats.data.prizeFund} format={f.money} />
               </span>
             </Card>
-            <Card className="p-4 text-center">
+            <Card className={cn("p-4 text-center", ST)} style={{ "--i": 1 } as CSSProperties}>
               <span className="text-xs text-mute block">Active Traders</span>
               <span className="text-lg font-bold text-ink mt-1 block">
                 <CountUp value={d.stats.data.activeTraders} format={f.num} />
               </span>
             </Card>
-            <Card className="p-4 text-center">
+            <Card className={cn("p-4 text-center", ST)} style={{ "--i": 2 } as CSSProperties}>
               <span className="text-xs text-mute block">Total Volume</span>
               <span className="text-lg font-bold text-ink mt-1 block">
                 <CountUp value={d.stats.data.totalVolumeLots} format={f.num} /> <span className="text-xs font-normal text-mute">lots</span>
               </span>
             </Card>
-            <Card className="p-4 text-center">
+            <Card className={cn("p-4 text-center", ST)} style={{ "--i": 3 } as CSSProperties}>
               <span className="text-xs text-mute block">Best Trade</span>
               <span className="text-lg font-bold text-up mt-1 block">
                 +<CountUp value={d.stats.data.bestTradeProfit} format={f.money} />
               </span>
             </Card>
-            <Card className="p-4 text-center">
+            <Card className={cn("p-4 text-center", ST)} style={{ "--i": 4 } as CSSProperties}>
               <span className="text-xs text-mute block">Avg Return</span>
               <span className="text-lg font-bold text-up mt-1 block">
                 +{d.stats.data.avgReturnPct}%
               </span>
             </Card>
-            <Card className="p-4 text-center">
+            <Card className={cn("p-4 text-center", ST)} style={{ "--i": 5 } as CSSProperties}>
               <span className="text-xs text-mute block">Total Trades</span>
               <span className="text-lg font-bold text-ink mt-1 block">
                 <CountUp value={d.stats.data.totalTrades} format={f.num} />
@@ -1461,7 +1499,7 @@ function ContestOverviewSection({ d }: { d: Landing }) {
         ) : (
           [0, 1, 2, 3, 4, 5].map((i) => <Sk key={i} h={80} className="rounded-xl" />)
         )}
-      </div>
+      </InView>
     </Section>
   );
 }
@@ -1473,11 +1511,143 @@ const PERIODS: { id: Period; label: string }[] = [
   { id: "overall", label: "Overall" },
 ];
 
+/** Floating "your rank" bar. Slides away while your own row is fully on screen. */
+function YouBar({ you, cutoff, cutoffRank, rowsKey, onJump }: { you: LeaderboardEntry; cutoff: number | undefined; cutoffRank: number | undefined; rowsKey: number; onJump: () => void }) {
+  const f = useFmt();
+  const auth = useAuth();
+  const [rowOn, setRowOn] = useState(false);
+  useEffect(() => {
+    let raf = 0;
+    const check = () => {
+      raf = 0;
+      const el = document.getElementById("you-row");
+      if (!el) return setRowOn(false);
+      const r = el.getBoundingClientRect();
+      setRowOn(r.top >= 80 && r.bottom <= window.innerHeight - 8);
+    };
+    const on = () => {
+      if (!raf) raf = requestAnimationFrame(check);
+    };
+    on();
+    window.addEventListener("scroll", on, { passive: true });
+    window.addEventListener("resize", on);
+    return () => {
+      window.removeEventListener("scroll", on);
+      window.removeEventListener("resize", on);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [rowsKey, you.rank]);
+  const gap = cutoff !== undefined ? Math.max(0, cutoff - you.netProfit) : 0;
+  const pct = cutoff && cutoff > 0 ? Math.min(1, Math.max(0, you.netProfit / cutoff)) : 1;
+  return (
+    <div className="pointer-events-none sticky bottom-4 z-20 h-0">
+      <div
+        role="complementary"
+        aria-label="Your rank"
+        aria-hidden={rowOn || undefined}
+        className={cn(
+          "fg-gborder absolute inset-x-0 bottom-0 overflow-hidden rounded-2xl bg-card/90 shadow-xl backdrop-blur-xl transition duration-500 ease-soft",
+          rowOn ? "pointer-events-none translate-y-6 opacity-0" : "pointer-events-auto translate-y-0 opacity-100"
+        )}
+      >
+        <div className="flex items-center gap-3 px-3 py-3 sm:gap-4 sm:px-4">
+          <div className="grid shrink-0 place-items-center leading-none">
+            <span className="text-label uppercase text-faint">Rank</span>
+            <span className="mt-1 text-ctitle font-bold tabular-nums text-ink">#{you.rank}</span>
+          </div>
+          <span className="hidden sm:block">
+            <Avatar name={you.name} src={you.avatarUrl} size={40} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-cell font-medium text-ink">{you.name}</span>
+              <Pill tone="accent">You</Pill>
+            </div>
+            <div className="mt-0.5 text-meta text-mute sm:truncate">
+              {you.inWinningZone || gap === 0 ? (
+                <span className="font-semibold text-up">In the winning zone</span>
+              ) : (
+                <>
+                  <b className="font-semibold text-ink">{f.money(gap)}</b> to reach the top {cutoffRank ?? 20}
+                </>
+              )}
+            </div>
+          </div>
+          <div className="hidden shrink-0 text-right sm:block">
+            <div className="text-label uppercase text-faint">Net profit</div>
+            <div className={cn("text-cell font-semibold tabular-nums", you.netProfit >= 0 ? "text-up" : "text-down")}>
+              {you.netProfit >= 0 ? "+" : ""}
+              {f.money(you.netProfit)}
+            </div>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="ghost" onClick={onJump} className="!px-3">
+              <span aria-hidden="true">↓</span>
+              <span className="sr-only md:not-sr-only">My row</span>
+            </Button>
+            <span className="hidden sm:contents">
+              <Button onClick={() => auth.openModal("card")}>Share</Button>
+            </span>
+          </div>
+        </div>
+        <div aria-hidden="true" className="h-1 bg-ink/10">
+          <div className="h-full bg-linear-to-r from-accent to-accent-2" style={{ width: `${pct * 100}%` }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LeaderboardSection({ d }: { d: Landing }) {
   const f = useFmt();
-  const { user } = useAuth();
+  const auth = useAuth();
+  const { user } = auth;
   const entries = d.board.data?.page.entries ?? [];
   const cutoff = d.board.data?.page.cutoffValue;
+  const you = d.board.data?.page.you ?? (user ? entries.find((e) => e.userId === user.id) ?? null : null);
+
+  /* jump to my row: scroll + flash; pages in more rows first if my row isn't loaded yet */
+  const wantRef = useRef(false);
+  const [kick, setKick] = useState(0);
+  const lastLen = useRef(-1);
+  const reduced = usePrefersReducedMotion();
+  const focusTick = auth.focusTick;
+  const busy = d.board.state === "loading";
+  const entriesLen = entries.length;
+  useEffect(() => {
+    if (focusTick > 0) wantRef.current = true;
+  }, [focusTick]);
+  useEffect(() => {
+    if (!wantRef.current) return;
+    const t = setTimeout(() => {
+      wantRef.current = false;
+    }, 9000);
+    return () => clearTimeout(t);
+  }, [focusTick, kick]);
+  useEffect(() => {
+    if (!wantRef.current || !d.board.data) return;
+    const el = document.getElementById("you-row");
+    if (el) {
+      el.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
+      el.classList.remove("fg-hi");
+      void el.offsetWidth;
+      el.classList.add("fg-hi");
+      setTimeout(() => el.classList.remove("fg-hi"), 3000);
+      wantRef.current = false;
+      return;
+    }
+    if (!you) return; // my entry hasn't arrived yet; the 9s guard above ends the wait
+    const maxRank = entries.reduce((m, e) => Math.max(m, e.rank), 0);
+    if (!d.search && you.rank > maxRank && d.hasMore) {
+      if (!busy && lastLen.current !== entriesLen) {
+        lastLen.current = entriesLen;
+        d.loadMore();
+      }
+      return;
+    }
+    document.getElementById("leaderboard")?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+    wantRef.current = false;
+  }, [kick, focusTick, d, entries, you, busy, entriesLen, reduced]);
 
   return (
     <Section id="leaderboard" alt>
@@ -1521,6 +1691,7 @@ function LeaderboardSection({ d }: { d: Landing }) {
       </div>
 
       {/* Board Table */}
+      <div>
       <div className="rounded-2xl border border-hairline bg-card shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
@@ -1555,7 +1726,9 @@ function LeaderboardSection({ d }: { d: Landing }) {
                   return (
                     <tr
                       key={e.rank}
+                      id={isYou ? "you-row" : undefined}
                       className={cn(
+                        "scroll-mt-40",
                         "row-st group f-wash hover:bg-accent/5 transition-colors",
                         e.inWinningZone && "bg-accent/[0.02]",
                         isYou && "bg-accent/10 font-medium"
@@ -1650,6 +1823,21 @@ function LeaderboardSection({ d }: { d: Landing }) {
             </button>
           </div>
         )}
+      </div>
+
+      {you && (
+        <YouBar
+          you={you}
+          cutoff={cutoff}
+          cutoffRank={d.board.data?.page.cutoffRank}
+          rowsKey={entriesLen}
+          onJump={() => {
+            lastLen.current = -1;
+            wantRef.current = true;
+            setKick((k) => k + 1);
+          }}
+        />
+      )}
       </div>
 
       {cutoff !== undefined && (
@@ -1963,17 +2151,27 @@ function CtaBand({ tagline }: { tagline: string }) {
   return (
     <section className="border-t border-hairline py-16 md:py-24">
       <div className={WRAP}>
-        <div className="rounded-3xl bg-linear-to-br from-accent to-accent-2 p-8 md:p-14 text-center text-accent-ink shadow-2xl relative overflow-hidden">
-          <h2 className="text-2xl sm:text-4xl font-extrabold max-w-xl mx-auto">
-            {tagline || "Trade smart. Climb the board."}
-          </h2>
-          <p className="mt-4 text-sm text-accent-ink/80 max-w-md mx-auto">
-            Outperform global traders on live accounts and take your place on the official leaderboard.
-          </p>
-          <div className="mt-8 flex justify-center">
-            <RankCta size="hero" />
-          </div>
-        </div>
+        <Reveal variant="scale">
+          <InView>
+            <div className="relative isolate overflow-hidden rounded-3xl border border-hairline bg-card px-5 py-14 text-center md:px-12">
+              <span aria-hidden="true" className="absolute inset-x-0 top-0 -z-10 h-px bg-linear-to-r from-transparent via-accent/60 to-transparent" />
+              <span aria-hidden="true" className="absolute left-1/2 top-0 -z-10 h-56 w-[70%] -translate-x-1/2 -translate-y-1/2 animate-[f-breathe_8s_ease-in-out_infinite] rounded-full bg-accent/15 blur-3xl" />
+              <span aria-hidden="true" className="fg-grid absolute inset-0 -z-10 opacity-25 [mask-image:radial-gradient(60%_80%_at_50%_0%,#000,transparent)]" />
+              <h2 className="mx-auto max-w-xl text-2xl font-extrabold text-ink sm:text-4xl">
+                <Words text={tagline || "Trade smart. Climb the board."} accent={3} />
+              </h2>
+              <p className={cn("mx-auto mt-4 max-w-md text-sm text-mute", ST)} style={{ "--i": 3 } as CSSProperties}>
+                Outperform global traders on live accounts and take your place on the official leaderboard.
+              </p>
+              <div className={cn("mt-8 flex flex-wrap items-center justify-center gap-3", ST)} style={{ "--i": 4 } as CSSProperties}>
+                <RankCta size="hero" />
+                <Button variant="ghost" size="lg" href="#leaderboard">
+                  View leaderboard
+                </Button>
+              </div>
+            </div>
+          </InView>
+        </Reveal>
       </div>
     </section>
   );

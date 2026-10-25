@@ -4,7 +4,7 @@ import { fail, json, readJson, sameOrigin } from "@/lib/http";
 import { dbConnect } from "@/lib/db";
 import { SiteSettings } from "@/lib/models/SiteSettings";
 
-export async function GET(req: Request): Promise<Response> {
+export async function GET(): Promise<Response> {
   try {
     await requireAdmin();
   } catch (e) {

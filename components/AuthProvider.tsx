@@ -24,6 +24,10 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<ModalKind>(null);
   const autoOpenedRef = useRef(false);
+  const [focusTick, setFocusTick] = useState(0);
+  const settled = useRef(false);
+  const hadUser = useRef(false);
+  const pendingFocus = useRef(false);
 
   const apply = useCallback((m: MeResponse) => {
     // mock mode: the mock API needs to know who is signed in before the page refetches
@@ -39,6 +43,9 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
           }
         : null
     );
+    // a sign-in after the page loaded (join / OTP login) queues a scroll-to-rank once the modal closes
+    if (settled.current && !hadUser.current && m.user) pendingFocus.current = true;
+    hadUser.current = !!m.user;
     setMe(m);
   }, []);
 
@@ -53,6 +60,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     void fetchMe().then((m) => {
       if (!alive) return;
       apply(m);
+      settled.current = true;
       setLoading(false);
     });
     return () => {
@@ -83,6 +91,10 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 
   const closeModal = useCallback(() => {
     setModal(null);
+    if (pendingFocus.current) {
+      pendingFocus.current = false;
+      setFocusTick((t) => t + 1);
+    }
   }, []);
 
   const logout = useCallback(async () => {
@@ -94,8 +106,8 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   }, [apply]);
 
   const value = useMemo<AuthValue>(
-    () => ({ loading, user: me.user, entry: me.entry, modal, openModal: setModal, closeModal, refresh, logout }),
-    [loading, me, modal, closeModal, refresh, logout]
+    () => ({ loading, user: me.user, entry: me.entry, modal, openModal: setModal, closeModal, refresh, logout, focusTick }),
+    [loading, me, modal, closeModal, refresh, logout, focusTick]
   );
 
   return (

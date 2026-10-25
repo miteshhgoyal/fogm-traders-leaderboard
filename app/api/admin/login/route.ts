@@ -17,8 +17,6 @@ const MAX_PER_DAY = 10;
 async function checkRateLimit(ip: string): Promise<{ ok: boolean; retryAfter: number }> {
   await dbConnect();
   const now = new Date();
-  const window15m = new Date(now.getTime() - 15 * 60 * 1000);
-  const window1d = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   
   const key15m = `admin_login:15m:${ip}`;
   const key1d = `admin_login:1d:${ip}`;

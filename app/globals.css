@@ -507,3 +507,30 @@ noscript .f-draw,
 noscript .fg-draw {
   stroke-dashoffset: 0 !important;
 }
+
+
+/* ── v4: view-gated animations (CSS animations, so they run even if the element mounts already "in") ── */
+.fg-vw > span { display: inline-block; transform: translateY(115%); }
+[data-in="true"] .fg-vw > span,
+.in .fg-vw > span { animation: f-wordin 0.7s var(--ease) both; animation-delay: calc(var(--w) * 70ms + 80ms); }
+.f-draw, .fg-draw { transition: none; }
+[data-in="true"] .f-draw, [data-in="true"] .fg-draw, .in .f-draw, .in .fg-draw { animation: f-draw 1.5s var(--ease) 0.15s both; }
+.fg-fade { transition: none; }
+[data-in="true"] .fg-fade, .in .fg-fade { animation: f-fadein 1s ease 0.6s both; }
+.f-bar, .fg-bar { transition: none; }
+[data-in="true"] .f-bar, [data-in="true"] .fg-bar, .in .f-bar, .in .fg-bar { animation: f-barx 1.3s var(--ease) 0.15s both; }
+.fg-pop { opacity: 0; transform: scale(0.4); transform-box: fill-box; transform-origin: center; }
+[data-in="true"] .fg-pop, .in .fg-pop { animation: f-pop 0.6s var(--ease) both; animation-delay: calc(var(--k, 0) * 120ms + 300ms); }
+.fg-hi { animation: f-rowhi 1.5s ease-out 2; }
+@keyframes f-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes f-barx { from { transform: scaleX(0); } to { transform: scaleX(var(--p, 0)); } }
+@keyframes f-pop { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: none; } }
+@keyframes f-fadeup { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes f-rowhi { 0% { box-shadow: inset 0 0 0 2px var(--accent); background-color: color-mix(in oklab, var(--accent) 22%, transparent); } 100% { box-shadow: inset 0 0 0 0 transparent; background-color: transparent; } }
+@media (prefers-reduced-motion: reduce) {
+  .fg-draw, .f-draw { stroke-dashoffset: 0; animation: none !important; }
+  .fg-fade, .fg-pop { opacity: 1; transform: none; animation: none !important; }
+  .fg-vw > span { transform: none; animation: none !important; }
+  .fg-bar, .f-bar { transform: scaleX(var(--p, 0)); animation: none !important; }
+  .fg-hi { animation: none !important; }
+}

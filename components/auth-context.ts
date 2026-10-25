@@ -16,6 +16,8 @@ export interface AuthValue {
   /** Re-read /api/me (after verify / profile save). Returns the fresh response. */
   refresh: () => Promise<MeResponse>;
   logout: () => Promise<void>;
+  /** Bumps once after a fresh sign-in / join finishes and the modal has closed: the board scrolls to the user's row. */
+  focusTick: number;
 }
 
 export const AuthCtx = createContext<AuthValue | null>(null);

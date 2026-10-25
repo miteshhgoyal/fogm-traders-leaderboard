@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { Button } from "./AdminPrimitives";
 
 export interface Column<T> {
   key: string;
@@ -81,12 +82,12 @@ export function DataTable<T>({
   const totalPages = Math.ceil(total / pageSize) || 1;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 font-sans">
       {/* Table toolbar / Column menu */}
-      <div className="flex items-center justify-between text-xs text-gray-500">
+      <div className="flex items-center justify-between text-meta text-mute">
         <div>
           {hasSelection && selectedIds.length > 0 && (
-            <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+            <span className="font-semibold text-accent">
               {selectedIds.length} row(s) selected
             </span>
           )}
@@ -95,19 +96,22 @@ export function DataTable<T>({
           <button
             type="button"
             onClick={() => setShowColMenu(!showColMenu)}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 py-1 font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+            className="flex items-center gap-1.5 rounded-xl border border-hairline-strong bg-card px-3 py-1.5 text-meta font-medium text-ink hover:border-accent hover:bg-alt transition"
           >
-            Columns
+            <span>Columns</span>
+            <svg className="size-3.5 text-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
           </button>
           {showColMenu && (
-            <div className="absolute right-0 top-full mt-1 z-30 w-44 rounded-xl border border-gray-200 bg-white p-2 shadow-xl dark:border-gray-800 dark:bg-gray-900">
-              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-2 py-1">
+            <div className="absolute right-0 top-full mt-1.5 z-30 w-48 rounded-2xl border border-hairline bg-card p-2 shadow-xl animate-[f-fadein_.15s_ease-out]">
+              <div className="text-[10px] font-semibold text-faint uppercase tracking-wider px-2 py-1">
                 Toggle Columns
               </div>
               {columns.map((col) => (
                 <label
                   key={col.key}
-                  className="flex items-center gap-2 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 rounded cursor-pointer dark:text-gray-300 dark:hover:bg-gray-800"
+                  className="flex items-center gap-2.5 px-2 py-1.5 text-cell text-ink hover:bg-alt rounded-lg cursor-pointer transition"
                 >
                   <input
                     type="checkbox"
@@ -121,7 +125,7 @@ export function DataTable<T>({
                         setVisibleKeys([...visibleKeys, col.key]);
                       }
                     }}
-                    className="size-3.5 accent-indigo-600 rounded"
+                    className="size-4 accent-accent rounded"
                   />
                   <span>{col.header}</span>
                 </label>
@@ -132,18 +136,18 @@ export function DataTable<T>({
       </div>
 
       {/* Table Container */}
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <table className="w-full text-left text-sm border-collapse">
-          <thead className="border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider dark:border-gray-800 dark:bg-gray-800/50 dark:text-gray-400">
+      <div className="overflow-x-auto rounded-2xl border border-hairline bg-card shadow-[var(--shadow)]">
+        <table className="w-full text-left text-cell border-collapse">
+          <thead className="sticky top-0 z-10 border-b border-hairline bg-alt text-meta font-semibold text-mute uppercase tracking-wider">
             <tr>
               {hasSelection && (
-                <th className="w-10 px-4 py-3 text-center">
+                <th className="w-12 px-4 py-3.5 text-center">
                   <input
                     type="checkbox"
                     checked={allSelected}
                     onChange={handleSelectAll}
                     aria-label="Select all rows"
-                    className="size-4 rounded accent-indigo-600"
+                    className="size-4 rounded accent-accent"
                   />
                 </th>
               )}
@@ -153,13 +157,13 @@ export function DataTable<T>({
                   <th
                     key={col.key}
                     scope="col"
-                    className={`px-4 py-3 ${
+                    className={`px-4 py-3.5 ${
                       col.align === "right"
                         ? "text-right"
                         : col.align === "center"
                         ? "text-center"
                         : "text-left"
-                    } ${col.sortable ? "cursor-pointer select-none hover:text-gray-900 dark:hover:text-white" : ""}`}
+                    } ${col.sortable ? "cursor-pointer select-none hover:text-ink transition" : ""}`}
                     onClick={() => col.sortable && onSortChange?.(col.key)}
                   >
                     <div
@@ -169,7 +173,7 @@ export function DataTable<T>({
                     >
                       <span>{col.header}</span>
                       {col.sortable && (
-                        <span className="text-gray-400 text-xs">
+                        <span className="text-faint text-xs">
                           {isSorted ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
                         </span>
                       )}
@@ -179,15 +183,15 @@ export function DataTable<T>({
               })}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+          <tbody className="divide-y divide-hairline">
             {loading ? (
               <tr>
                 <td
                   colSpan={activeColumns.length + (hasSelection ? 1 : 0)}
-                  className="px-4 py-12 text-center text-sm text-gray-500"
+                  className="px-4 py-16 text-center text-cell text-mute"
                 >
-                  <div className="inline-flex items-center gap-2">
-                    <span className="size-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+                  <div className="inline-flex items-center gap-2.5">
+                    <span className="size-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
                     <span>Loading data…</span>
                   </div>
                 </td>
@@ -196,7 +200,7 @@ export function DataTable<T>({
               <tr>
                 <td
                   colSpan={activeColumns.length + (hasSelection ? 1 : 0)}
-                  className="px-4 py-8 text-center text-sm text-red-600"
+                  className="px-4 py-10 text-center text-cell text-down font-medium"
                 >
                   {error}
                 </td>
@@ -205,7 +209,7 @@ export function DataTable<T>({
               <tr>
                 <td
                   colSpan={activeColumns.length + (hasSelection ? 1 : 0)}
-                  className="px-4 py-12 text-center text-sm text-gray-500"
+                  className="px-4 py-16 text-center text-cell text-mute"
                 >
                   {emptyMessage}
                 </td>
@@ -219,17 +223,17 @@ export function DataTable<T>({
                   <tr
                     key={id}
                     onClick={() => onRowClick?.(row)}
-                    className={`transition-colors ${
+                    className={`transition-colors duration-150 ${
                       onRowClick ? "cursor-pointer" : ""
                     } ${
                       isSelected
-                        ? "bg-indigo-50/60 dark:bg-indigo-950/30"
-                        : "hover:bg-gray-50/80 dark:hover:bg-gray-800/50"
+                        ? "bg-accent/10"
+                        : "hover:bg-accent/[0.04]"
                     }`}
                   >
                     {hasSelection && (
                       <td
-                        className="w-10 px-4 py-3 text-center"
+                        className="w-12 px-4 py-3.5 text-center"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <input
@@ -237,14 +241,14 @@ export function DataTable<T>({
                           checked={isSelected}
                           onChange={() => handleSelectRow(id)}
                           aria-label={`Select row ${id}`}
-                          className="size-4 rounded accent-indigo-600"
+                          className="size-4 rounded accent-accent"
                         />
                       </td>
                     )}
                     {activeColumns.map((col) => (
                       <td
                         key={col.key}
-                        className={`px-4 py-3 text-gray-900 dark:text-gray-100 ${
+                        className={`px-4 py-3.5 text-ink ${
                           col.align === "right"
                             ? "text-right"
                             : col.align === "center"
@@ -266,19 +270,19 @@ export function DataTable<T>({
       </div>
 
       {/* Pagination Footer */}
-      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-meta text-mute pt-2">
         <div>
           Showing {data.length > 0 ? (page - 1) * pageSize + 1 : 0} to{" "}
           {Math.min(page * pageSize, total)} of {total.toLocaleString()} records
         </div>
         <div className="flex items-center gap-3">
           {onPageSizeChange && (
-            <div className="flex items-center gap-1.5">
-              <span>Per page:</span>
+            <div className="flex items-center gap-2">
+              <span className="text-meta">Per page:</span>
               <select
                 value={pageSize}
                 onChange={(e) => onPageSizeChange(Number(e.target.value))}
-                className="h-8 rounded-lg border border-gray-300 bg-white px-2 text-xs text-gray-700 outline-none focus:border-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                className="h-8 rounded-lg border border-hairline-strong bg-card px-2 text-meta text-ink outline-none focus:border-accent"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
@@ -288,26 +292,26 @@ export function DataTable<T>({
             </div>
           )}
           {onPageChange && (
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
                 disabled={page <= 1}
                 onClick={() => onPageChange(page - 1)}
-                className="h-8 rounded-lg border border-gray-300 px-2.5 font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-gray-700 dark:hover:bg-gray-800"
               >
                 Previous
-              </button>
-              <span className="px-2 font-medium">
+              </Button>
+              <span className="px-2 font-medium text-ink tabular-nums">
                 {page} / {totalPages}
               </span>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 disabled={page >= totalPages}
                 onClick={() => onPageChange(page + 1)}
-                className="h-8 rounded-lg border border-gray-300 px-2.5 font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-gray-700 dark:hover:bg-gray-800"
               >
                 Next
-              </button>
+              </Button>
             </div>
           )}
         </div>

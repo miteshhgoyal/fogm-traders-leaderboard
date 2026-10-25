@@ -50,15 +50,15 @@ export function ColorField({ label, value, onChange, contrastWith }: ColorFieldP
   const isAAMet = ratio ? ratio >= 4.5 : true;
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5 font-sans">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-medium text-gray-700 dark:text-gray-300">{label}</label>
+        <label className="text-meta font-medium text-ink">{label}</label>
         {ratio !== null && (
           <span
-            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
               isAAMet
-                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                ? "bg-up/15 text-up border border-up/25"
+                : "bg-down/15 text-down border border-down/25"
             }`}
             title={`Contrast ratio: ${ratio.toFixed(2)}:1`}
           >
@@ -66,13 +66,13 @@ export function ColorField({ label, value, onChange, contrastWith }: ColorFieldP
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2">
-        <div className="relative size-9 shrink-0 overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700 shadow-sm">
+      <div className="flex items-center gap-2.5">
+        <div className="relative size-10 shrink-0 overflow-hidden rounded-xl border border-hairline-strong shadow-xs">
           <input
             type="color"
             value={value.startsWith("#") ? value : "#3b36e0"}
             onChange={(e) => onChange(e.target.value)}
-            className="absolute -inset-2 size-14 cursor-pointer"
+            className="absolute -inset-3 size-16 cursor-pointer"
           />
         </div>
         <input
@@ -80,11 +80,11 @@ export function ColorField({ label, value, onChange, contrastWith }: ColorFieldP
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="#000000"
-          className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 font-mono text-xs uppercase text-gray-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+          className="h-10 w-full rounded-xl border border-hairline-strong bg-bg px-3.5 font-mono text-meta uppercase text-ink outline-none transition focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30"
         />
       </div>
       {!isAAMet && ratio !== null && (
-        <p className="text-[11px] text-amber-600 dark:text-amber-400">
+        <p className="text-[11px] text-down">
           ⚠️ WCAG AA contrast warning (&lt; 4.5:1 ratio with background)
         </p>
       )}

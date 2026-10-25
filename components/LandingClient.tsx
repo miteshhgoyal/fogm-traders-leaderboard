@@ -6,14 +6,12 @@ import {
   useContext,
   useEffect,
   useId,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { Inter } from "next/font/google";
 import Avatar from "@/components/Avatar";
 import AuthProvider from "@/components/AuthProvider";
 import { useAuth } from "@/components/auth-context";
@@ -48,8 +46,6 @@ import {
   type PrizeTier,
   type WinnersPayload,
 } from "@/lib/api";
-
-const fontInter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 /* ═══════════════════════════ THEME CONFIG ═══════════════════════════════ */
 interface Tone {
@@ -786,13 +782,15 @@ function AccountMenu() {
   const [showName, setShowName] = useState(u?.showName ?? true);
   const [showPhoto, setShowPhoto] = useState(u?.showPhoto ?? true);
   const [updating, setUpdating] = useState(false);
+  const [prevU, setPrevU] = useState(u);
 
-  useEffect(() => {
+  if (prevU !== u) {
+    setPrevU(u);
     if (u) {
       setShowName(u.showName);
       setShowPhoto(u.showPhoto);
     }
-  }, [u]);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -1377,7 +1375,9 @@ function LeaderboardSection({ d }: { d: Landing }) {
               onClick={() => d.setPeriod(p.id)}
               className={cn(
                 "rounded-full px-4 py-1.5 text-xs font-semibold transition-colors",
-                d.period === p.id ? "bg-primary text-primary-foreground shadow" : "text-mute hover:text-ink"
+                d.period === p.id
+                  ? "bg-linear-to-br from-accent to-accent-2 text-accent-ink shadow-[0_4px_16px_-4px_color-mix(in_oklab,var(--accent)_60%,transparent)] font-semibold"
+                  : "text-mute hover:text-ink"
               )}
             >
               {p.label}
@@ -1401,7 +1401,7 @@ function LeaderboardSection({ d }: { d: Landing }) {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="border-b border-hairline bg-muted/20 text-xs font-semibold text-mute uppercase tracking-wider">
+              <tr className="border-b border-hairline bg-alt text-xs font-semibold text-mute uppercase tracking-wider">
                 <th className="py-3 px-4 w-12 text-center">Rank</th>
                 <th className="py-3 px-4">Trader</th>
                 <th className="py-3 px-4 text-center">Move</th>
@@ -1515,7 +1515,7 @@ function LeaderboardSection({ d }: { d: Landing }) {
 
         {/* Load more */}
         {d.hasMore && (
-          <div className="p-4 border-t border-hairline text-center bg-muted/10">
+          <div className="p-4 border-t border-hairline text-center bg-alt/50">
             <button
               type="button"
               onClick={d.loadMore}
@@ -1917,11 +1917,12 @@ function Footer({
 
 /* ═══════════════════════════ MAIN CLIENT EXPORT ═════════════════════════ */
 export default function LandingClient({ settings }: { settings: SiteSettingsData }) {
-  const [mode, setMode] = useState<"light" | "dark">("light");
-
-  useLayoutEffect(() => {
-    setMode(document.documentElement.classList.contains("dark") ? "dark" : "light");
-  }, []);
+  const [mode, setMode] = useState<"light" | "dark">(() => {
+    if (typeof document !== "undefined") {
+      return document.documentElement.classList.contains("dark") ? "dark" : "light";
+    }
+    return "light";
+  });
 
   const toggle = useCallback(() => {
     const next = mode === "dark" ? "light" : "dark";
@@ -1947,7 +1948,7 @@ export default function LandingClient({ settings }: { settings: SiteSettingsData
   // Check Maintenance Mode
   if (settings.maintenance?.enabled) {
     return (
-      <div className={cn("fogm min-h-screen flex items-center justify-center bg-bg font-sans p-6 text-center", fontInter.variable)}>
+      <div className="fogm min-h-screen flex items-center justify-center bg-bg font-sans p-6 text-center">
         <style dangerouslySetInnerHTML={{ __html: css }} />
         <div className="max-w-md p-8 rounded-2xl border border-hairline bg-card shadow-xl space-y-4">
           <div className="size-12 mx-auto rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold text-xl">
@@ -1960,7 +1961,7 @@ export default function LandingClient({ settings }: { settings: SiteSettingsData
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="px-4 py-2 text-xs font-semibold rounded-lg bg-primary text-primary-foreground shadow hover:bg-primary/90"
+            className="px-5 py-2.5 text-cell font-semibold rounded-xl bg-linear-to-br from-accent to-accent-2 text-accent-ink shadow hover:-translate-y-px transition"
           >
             Refresh page
           </button>
@@ -1970,7 +1971,7 @@ export default function LandingClient({ settings }: { settings: SiteSettingsData
   }
 
   return (
-    <div className={cn("fogm min-h-screen overflow-x-clip bg-bg font-sans text-body text-ink antialiased tabular-nums", fontInter.variable)}>
+    <div className="fogm min-h-screen overflow-x-clip bg-bg font-sans text-body text-ink antialiased tabular-nums">
       <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} suppressHydrationWarning />
       <style dangerouslySetInnerHTML={{ __html: css }} />
 

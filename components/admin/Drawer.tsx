@@ -25,30 +25,34 @@ export function Drawer({ isOpen, title, description, onClose, children, footer }
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-sm transition-opacity"
+      className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-sm animate-[f-fadein_.2s_ease-out]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
-        <div className="w-screen max-w-md border-l border-gray-200 bg-white p-6 shadow-2xl overflow-y-auto dark:border-gray-800 dark:bg-gray-900">
-          <div className="flex items-center justify-between pb-4 border-b border-gray-200 dark:border-gray-800">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h2>
-              {description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{description}</p>}
+        <div className="w-screen max-w-md border-l border-hairline bg-card p-6 shadow-2xl overflow-y-auto animate-[f-modalin_.25s_var(--ease)] flex flex-col justify-between text-ink">
+          <div>
+            <div className="flex items-center justify-between pb-4 border-b border-hairline">
+              <div>
+                <h2 className="text-ctitle font-semibold text-ink">{title}</h2>
+                {description && <p className="text-meta text-mute mt-0.5">{description}</p>}
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl p-2 text-mute hover:bg-alt hover:text-ink transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                aria-label="Close panel"
+              >
+                <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-              aria-label="Close panel"
-            >
-              ✕
-            </button>
+            <div className="mt-6">{children}</div>
           </div>
-          <div className="mt-6 flex-1">{children}</div>
           {footer && (
-            <div className="pt-4 mt-6 border-t border-gray-200 dark:border-gray-800 flex items-center justify-end">
+            <div className="pt-4 mt-6 border-t border-hairline flex items-center justify-end gap-3">
               {footer}
             </div>
           )}

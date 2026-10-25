@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, type DragEvent } from "react";
+import { Button } from "./AdminPrimitives";
 
 interface ImageUploadProps {
   label: string;
@@ -15,7 +16,7 @@ export function ImageUpload({
   label,
   value,
   onChange,
-  maxSizeBytes = 1024 * 1024, // 1MB default
+  maxSizeBytes = 2 * 1024 * 1024, // 2MB default
   accept = "image/png,image/svg+xml,image/webp,image/jpeg",
   hint,
 }: ImageUploadProps) {
@@ -86,8 +87,11 @@ export function ImageUpload({
   };
 
   return (
-    <div className="space-y-2">
-      <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+    <div className="space-y-2 font-sans">
+      <div className="flex items-center justify-between">
+        <span className="block text-meta font-medium text-ink">{label}</span>
+        {hint && <span className="text-[11px] text-faint">{hint}</span>}
+      </div>
       <input
         ref={fileInputRef}
         type="file"
@@ -99,30 +103,32 @@ export function ImageUpload({
       />
 
       {value ? (
-        <div className="flex items-center gap-4 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/50">
-          <div className="relative size-14 shrink-0 overflow-hidden rounded-lg border border-gray-300 bg-white p-1 dark:border-gray-700 dark:bg-gray-900">
+        <div className="flex items-center gap-4 rounded-2xl border border-hairline bg-card p-3 shadow-xs">
+          <div className="relative size-16 shrink-0 overflow-hidden rounded-xl border border-hairline-strong bg-alt p-1.5 flex items-center justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={value} alt="Preview" className="size-full object-contain" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-mono text-gray-500 dark:text-gray-400">{value}</p>
+            <p className="truncate text-meta font-mono text-mute">{value}</p>
           </div>
           <div className="flex gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={uploading}
-              className="text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+              onClick={() => fileInputRef.current?.click()}
             >
               Replace
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={uploading}
               onClick={() => onChange(null)}
-              className="text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400"
+              className="text-down hover:bg-down/10"
             >
               Remove
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
@@ -134,20 +140,34 @@ export function ImageUpload({
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`cursor-pointer rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
+          className={`cursor-pointer rounded-2xl border-2 border-dashed p-6 text-center transition-colors ${
             dragOver
-              ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20"
-              : "border-gray-300 hover:border-gray-400 dark:border-gray-700 dark:hover:border-gray-600"
+              ? "border-accent bg-accent/10"
+              : "border-hairline-strong hover:border-accent bg-card/40"
           }`}
         >
-          <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            {uploading ? "Uploading…" : "Click or drag file here to upload"}
-          </div>
-          {hint && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{hint}</p>}
+          {uploading ? (
+            <div className="flex items-center justify-center gap-2 py-4 text-cell text-mute">
+              <span className="size-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+              <span>Uploading asset…</span>
+            </div>
+          ) : (
+            <div className="py-2">
+              <div className="mx-auto mb-2 flex size-10 items-center justify-center rounded-full bg-alt text-mute">
+                <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              </div>
+              <p className="text-cell font-medium text-ink">Click or drag file to upload</p>
+              <p className="mt-1 text-meta text-faint">PNG, JPG, SVG, WebP up to {(maxSizeBytes / (1024 * 1024)).toFixed(0)} MB</p>
+            </div>
+          )}
         </div>
       )}
 
-      {error && <p className="text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-meta font-medium text-down">{error}</p>}
     </div>
   );
 }

@@ -34,23 +34,21 @@ function Glyph({ name }: { name: keyof typeof ICON }) {
 
 /** Tilt-on-hover card preview + share actions. */
 export default function ShareCard({ userId, rank, siteUrl }: ShareCardProps) {
-  const [origin, setOrigin] = useState(siteUrl ?? "");
+  const [origin] = useState(() => siteUrl || (typeof window !== "undefined" ? window.location.origin : ""));
   const [toast, setToast] = useState<string | null>(null);
-  const [canNativeShare, setCanNativeShare] = useState(false);
-  const [reduced, setReduced] = useState(false);
+  const [canNativeShare] = useState(() => typeof navigator !== "undefined" && typeof navigator.share === "function");
+  const [reduced, setReduced] = useState(() => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const [loaded, setLoaded] = useState(false);
   const tilt = useRef<HTMLDivElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!siteUrl) setOrigin(window.location.origin);
-    setCanNativeShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+    if (typeof window === "undefined") return;
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mq.matches);
     const on = () => setReduced(mq.matches);
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
-  }, [siteUrl]);
+  }, []);
 
   useEffect(() => () => {
     if (toastTimer.current) clearTimeout(toastTimer.current);

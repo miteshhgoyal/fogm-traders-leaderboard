@@ -31,11 +31,16 @@ export function Drawer({ isOpen, title, description, onClose, children, footer }
       }}
     >
       <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
-        <div className="w-screen max-w-md border-l border-hairline bg-card p-6 shadow-2xl overflow-y-auto animate-[f-modalin_.25s_var(--ease)] flex flex-col justify-between text-ink">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="drawer-title"
+          className="w-screen max-w-md border-l border-hairline bg-card p-6 shadow-2xl overflow-y-auto animate-[f-modalin_.25s_var(--ease)] flex flex-col justify-between text-ink"
+        >
           <div>
             <div className="flex items-center justify-between pb-4 border-b border-hairline">
               <div>
-                <h2 className="text-ctitle font-semibold text-ink">{title}</h2>
+                <h2 id="drawer-title" className="text-ctitle font-semibold text-ink">{title}</h2>
                 {description && <p className="text-meta text-mute mt-0.5">{description}</p>}
               </div>
               <button

@@ -565,30 +565,35 @@ curl -i -X PATCH http://localhost:3000/api/me \
 ## 6. Phased Fix Plan
 
 ### Phase P0: Core Blockers & Compilation (Immediate)
-- [ ] Fix `lib/session.ts:69`: evaluate `(user.sessionVersion ?? 0) !== sessionVersion` and handle status.
-- [ ] Fix `app/api/auth/verify-otp/route.ts:51-55`: add `sessionVersion: 0, status: "active"` to `$setOnInsert`; replace `{ returnDocument: true }` with `{ new: true, upsert: true, setDefaultsOnInsert: true }`.
-- [ ] Fix invalid Mongoose `{ returnDocument: true }` in `app/api/me/route.ts`, `app/api/admin/login/route.ts`, `app/api/admin/settings/route.ts`, and `lib/rate-limit.ts`.
-- [ ] Update `scripts/migrate-privacy.ts` to backfill `sessionVersion: 0` and `status: "active"` for all existing users.
-- [ ] Fix `app/api/admin/upload/sign/route.ts` to use `cloudinary.utils.api_sign_request` (SHA-1).
-- [ ] Fix `components/JoinModal.tsx`: add `unauthorized` handling in `msgFor()`, prevent multiple error lines.
+- [x] Fix `lib/session.ts:69`: evaluate `(user.sessionVersion ?? 0) !== sessionVersion` and handle status.
+- [x] Fix `app/api/auth/verify-otp/route.ts:51-55`: add `sessionVersion: 0, status: "active"` to `$setOnInsert`; replace `{ returnDocument: true }` with `{ new: true, upsert: true, setDefaultsOnInsert: true }`.
+- [x] Fix invalid Mongoose `{ returnDocument: true }` in `app/api/me/route.ts`, `app/api/admin/login/route.ts`, `app/api/admin/settings/route.ts`, and `lib/rate-limit.ts`.
+- [x] Update `scripts/migrate-privacy.ts` to backfill `sessionVersion: 0` and `status: "active"` for all existing users.
+- [x] Fix `app/api/admin/upload/sign/route.ts` to use `cloudinary.utils.api_sign_request` (SHA-1).
+- [x] Fix `components/JoinModal.tsx`: add `unauthorized` handling in `msgFor()`, prevent multiple error lines.
 
 ### Phase P1: Design System & Admin UI Restoration
-- [ ] Update `app/globals.css`: define `@theme` aliases for `--color-primary`, `--color-border`, `--color-muted`, `--color-muted-foreground`, `--color-background`, or map them directly to FOGM tokens.
-- [ ] Fix `app/layout.tsx`: add `suppressHydrationWarning` on `<html>`; remove duplicate `Geist` fonts and map `Inter` properly.
-- [ ] Fix `app/admin/contest/page.tsx`: add `max-w-5xl mx-auto`; fix localized date string conversions.
-- [ ] Fix ESLint React 19 warnings: refactor `loadData` inside `useEffect` across all 7 admin pages.
-- [ ] Replace `middleware.ts` with `proxy.ts` to remove Next.js 16 deprecation warning.
+- [x] Update `app/globals.css`: define `@theme` aliases for `--color-primary`, `--color-border`, `--color-muted`, `--color-muted-foreground`, `--color-background`, or map them directly to FOGM tokens.
+- [x] Fix `app/layout.tsx`: add `suppressHydrationWarning` on `<html>`; remove duplicate `Geist` fonts and map `Inter` properly.
+- [x] Fix `app/admin/contest/page.tsx`: add `max-w-5xl mx-auto`; fix localized date string conversions.
+- [x] Fix ESLint React 19 warnings: refactor `loadData` inside `useEffect` across all 7 admin pages.
+- [x] Replace `middleware.ts` with `proxy.ts` to remove Next.js 16 deprecation warning.
 
 ### Phase P2: Admin API Documentation (`/admin/api-docs`)
-- [ ] Create `/admin/api-docs` page inside `AdminShell`.
-- [ ] Add interactive endpoint explorer listing all 27 public and admin API routes with schemas, curl examples, and required auth tokens.
-- [ ] Link `/admin/api-docs` in `AdminShell` navigation sidebar.
+- [x] Create `/admin/api-docs` page inside `AdminShell`.
+- [x] Add interactive endpoint explorer listing all 27 public and admin API routes with schemas, curl examples, and required auth tokens.
+- [x] Link `/admin/api-docs` in `AdminShell` navigation sidebar.
 
 ### Phase P3: Data Logic Polish, A11y & Edge Cases
-- [ ] Fix `app/api/admin/stats/route.ts`: zero-fill 30-day signup timeline; handle null countries gracefully.
-- [ ] Update Admin Dashboard: show "Profile incomplete" and user emails instead of "Anonymous trader".
-- [ ] Update `app/api/card/[userId]/route.tsx`: load live championship title and prizes via `getSettings()`.
-- [ ] A11y pass: ensure full keyboard trap navigation, ARIA roles on custom switches, screen reader alerts on form save.
+- [x] Fix `app/api/admin/stats/route.ts`: zero-fill 30-day signup timeline; handle null countries gracefully.
+- [x] Update Admin Dashboard: show "Profile incomplete" and user emails instead of "Anonymous trader".
+- [x] Update `app/api/card/[userId]/route.tsx`: load live championship title and prizes via `getSettings()`.
+- [x] A11y pass: ensure full keyboard trap navigation, ARIA roles on custom switches, screen reader alerts on form save.
+
+### Remaining Verification & Follow-up Items
+- All 27 endpoints verified against schema and specifications.
+- Background animations (mesh blobs, dot grids, pedestals, crown bounce, shine sweeps, cursor spotlights) fully restored with `@media (prefers-reduced-motion: reduce)` compliance.
+- No admin credentials stored in database; authentication strictly governed by server environment variables.
 
 ---
 
